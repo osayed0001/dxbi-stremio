@@ -108,7 +108,7 @@ fun HomeScreen(
             val slides = billboard.filter { fits(it.type) }
             item(key = "billboard") {
                 if (slides.isNotEmpty()) Billboard(slides, onOpen, onPlay)
-                else Box(Modifier.padding(horizontal = Gutter).fillMaxWidth().aspectRatio(0.78f).clip(RoundedCornerShape(12.dp)).shimmer())
+                else Box(Modifier.padding(horizontal = Gutter).fillMaxWidth().aspectRatio(billboardShape()).clip(RoundedCornerShape(12.dp)).shimmer())
                 Spacer(Modifier.height(26.dp))
             }
 
@@ -205,6 +205,7 @@ fun Pill(selected: Boolean, onClick: () -> Unit, content: @Composable () -> Unit
 @Composable
 private fun Billboard(slides: List<Title>, onOpen: (Title) -> Unit, onPlay: (Title) -> Unit) {
     val pager = rememberPagerState { slides.size }
+    val wide = billboardShape() > 1f
     // turns by itself, like the big screen's billboard
     LaunchedEffect(slides.size) {
         while (slides.size > 1) {
@@ -216,14 +217,17 @@ private fun Billboard(slides: List<Title>, onOpen: (Title) -> Unit, onPlay: (Tit
         HorizontalPager(pager, contentPadding = PaddingValues(horizontal = Gutter), pageSpacing = 10.dp) { page ->
             val t = slides[page]
             Box(
-                Modifier.fillMaxWidth().aspectRatio(0.78f).clip(RoundedCornerShape(12.dp)).background(Dx.Raised)
+                Modifier.fillMaxWidth().aspectRatio(billboardShape()).clip(RoundedCornerShape(12.dp)).background(Dx.Raised)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .clickable { onOpen(t) },
             ) {
                 AsyncImage(model = t.backdrop, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(bottomScrim(0.95f)))
-                Column(Modifier.align(Alignment.BottomCenter).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    TitleArt(t, Modifier.fillMaxWidth(0.78f).heightIn(max = 96.dp))
+                Box(Modifier.fillMaxSize().background(if (wide) Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.6f to Color.Transparent) else bottomScrim(0.95f)))
+                Column(
+                    Modifier.align(if (wide) Alignment.BottomStart else Alignment.BottomCenter).fillMaxWidth(if (wide) 0.45f else 1f).padding(16.dp),
+                    horizontalAlignment = if (wide) Alignment.Start else Alignment.CenterHorizontally,
+                ) {
+                    TitleArt(t, Modifier.fillMaxWidth(if (wide) 1f else 0.78f).heightIn(max = 96.dp))
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         t.genres.take(3).forEachIndexed { i, g ->
@@ -341,4 +345,11 @@ private fun AiringRow(items: List<Airing>, onOpen: (Airing) -> Unit) {
             }
         }
     }
+}
+
+/** The billboard's shape: a tall card upright, a wide cinema shape on a phone held sideways */
+@Composable
+private fun billboardShape(): Float {
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    return if (config.screenWidthDp > config.screenHeightDp) 3.2f else 0.78f
 }

@@ -15020,6 +15020,8 @@
     log("ready");
   }
 
+  // The last streams the phone app was shown (api.phone.streams), for api.phone.play
+  let phoneStreams = null;
   const api = {
     settings,
     sync,
@@ -15125,6 +15127,50 @@
           audience: tmdb ? { reviews: tmdb.reviews || [], total: tmdb.total || 0, url: tmdb.url || null, error: tmdb.error || null } : null,
           missing: [!settings.tmdbKey.trim() && "tmdb", !settings.mdblistKey.trim() && "mdblist"].filter(Boolean),
         };
+      },
+      // The streams for the title open in details, read the way the stream list reads them, and the one
+      // Just press Play would pick (what this viewer chose last, else the best that's ready to play)
+      async streams() {
+        const state = await core().getState("meta_details").catch(() => null);
+        const groups = state && Array.isArray(state.streams) ? state.streams : [];
+        const metaId = state && state.selected && state.selected.metaPath && state.selected.metaPath.id;
+        const items = groups.flatMap((g) => (g && g.content && g.content.type === "Ready" && Array.isArray(g.content.content)
+          ? g.content.content.map((st) => ({ st, addon: (g.addon && g.addon.manifest && g.addon.manifest.name) || "" })) : []))
+          .filter((x) => x.st && x.st.deepLinks && x.st.deepLinks.player && !x.st.ytId)
+          .map((x) => ({ ...x, torrent: !!x.st.infoHash && !x.st.url, hint: watchParty.streamHints(x.st), d: describeStream(String(x.st.name || ""), `${x.st.name || ""}\n${x.st.description || x.st.title || ""}`) }));
+        const server = await core().getState("streaming_server").catch(() => null);
+        const options = {
+          limit: streamChoice.limit(settings.quickPlayQuality),
+          fallback: settings.quickPlayFallback,
+          torrents: !!(server && server.settings && server.settings.type === "Ready") || (IN_TV && settings.tvTorrents),
+        };
+        const choice = items.length ? streamChoice.choose(items, metaId ? quickPlay.memory(metaId) : null, options) : null;
+        phoneStreams = { items, options };
+        return {
+          justPlay: settings.quickPlay,
+          settled: groups.length > 0 && !groups.some((g) => g && g.content && g.content.type === "Loading"),
+          videoId: (state && state.selected && state.selected.streamPath && state.selected.streamPath.id) || null,
+          pick: choice ? items.indexOf(choice.item) : -1,
+          how: choice ? choice.how : null,
+          items: items.map((x) => ({
+            play: x.st.deepLinks.player,
+            addon: x.addon,
+            // the file's own name: what tells two 1080p streams apart
+            filename: (x.st.behaviorHints && x.st.behaviorHints.filename) || String(x.st.description || x.st.title || "").split("\n").map((l) => l.trim()).find((l) => l && !/^[👤💾⚙🔎]/u.test(l)) || "",
+            label: quickPlay.label(x.d),
+            torrent: x.torrent,
+            ...x.d,
+          })),
+        };
+      },
+      // Playing one of those: like Just press Play, the next best are kept in case it won't play
+      play(index) {
+        const item = phoneStreams && phoneStreams.items[index];
+        if (!item) return null;
+        quickPlay.from = location.hash;
+        quickPlay.spares = streamChoice.spares(phoneStreams.items, item, phoneStreams.options);
+        quickPlay.play(item);
+        return item.st.deepLinks.player;
       },
       // Who's watching? (choose one with viewers.select)
       viewers() {

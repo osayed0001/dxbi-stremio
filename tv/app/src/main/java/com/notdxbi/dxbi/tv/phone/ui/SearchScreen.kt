@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -31,7 +32,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
@@ -166,25 +166,27 @@ fun PosterGrid(items: List<Title>, loading: Boolean, header: String? = null, onE
     }
 }
 
-/** See All for a Home row, or Categories: one catalog, a genre to narrow it down */
+/**
+ * Discover, as in Stremio: any addon's catalog, by type and genre. Also what a Home row's See All
+ * and Categories open (then with Back, and [title] for the row).
+ */
 @Composable
-fun DiscoverScreen(stremio: Stremio, title: String, onBack: () -> Unit, onOpen: (Title) -> Unit) {
+fun DiscoverScreen(stremio: Stremio, title: String, onBack: (() -> Unit)?, onOpen: (Title) -> Unit) {
     val discover by stremio.discover.collectAsState()
-    var genres by remember { mutableStateOf(false) }
     val d = discover
     Column(Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Row(Modifier.fillMaxWidth().height(56.dp).padding(end = Gutter), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Dx.Text) }
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Dx.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        }
-        if (d != null && d.genres.isNotEmpty()) Box(Modifier.padding(horizontal = Gutter, vertical = 4.dp)) {
-            Pill(selected = d.genre != null, onClick = { genres = true }) {
-                Text(d.genre ?: "All genres", color = Dx.Text, style = MaterialTheme.typography.labelMedium)
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Dx.Text, modifier = Modifier.size(18.dp))
+        ScreenTitle(title, onBack)
+        if (d != null) LazyRow(contentPadding = PaddingValues(horizontal = Gutter, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val types = d.types.filter { it.link != null }
+            if (types.size > 1) item {
+                PickMenu(types.firstOrNull { it.selected }?.name?.let(::typeLabel) ?: "Type", types.map { typeLabel(it.name) to it.link!! }) { stremio.discover(it) }
             }
-            DropdownMenu(expanded = genres, onDismissRequest = { genres = false }) {
-                DropdownMenuItem(text = { Text("All genres") }, onClick = { genres = false; stremio.discoverGenre(null) })
-                d.genres.forEach { g -> DropdownMenuItem(text = { Text(g) }, onClick = { genres = false; stremio.discoverGenre(g) }) }
+            val catalogs = d.catalogs.filter { it.link != null }
+            if (catalogs.size > 1) item {
+                PickMenu(catalogs.firstOrNull { it.selected }?.name ?: "Catalog", catalogs.map { it.name to it.link!! }) { stremio.discover(it) }
+            }
+            if (d.genres.isNotEmpty()) item {
+                PickMenu(d.genre ?: "All genres", listOf("All genres" to "") + d.genres.map { it to it }) { stremio.discoverGenre(it.ifEmpty { null }) }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -194,5 +196,28 @@ fun DiscoverScreen(stremio: Stremio, title: String, onBack: () -> Unit, onOpen: 
             onEnd = { if (d?.nextPage == true && d.state == Load.Ready) stremio.discoverMore() },
             onOpen = onOpen,
         )
+    }
+}
+
+private fun typeLabel(type: String) = when (type) {
+    "movie" -> "Films"
+    "series" -> "Series"
+    "tv" -> "TV"
+    "channel" -> "Channels"
+    else -> type.replaceFirstChar { it.uppercase() }
+}
+
+/** A pill that opens a list to pick from */
+@Composable
+private fun PickMenu(label: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Pill(selected = true, onClick = { open = true }) {
+            Text(label, color = Dx.Text, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Dx.Text, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = if (options.size > 8) Modifier.height(420.dp) else Modifier) {
+            options.forEach { (text, value) -> DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onPick(value) }) }
+        }
     }
 }

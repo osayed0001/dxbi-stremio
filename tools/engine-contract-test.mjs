@@ -36,12 +36,12 @@ for (const name of ["settings", "viewers", "whoIsWatching", "homeLayout", "episo
 assert.match(plugin, /window\.__dxbi = api/, "the api is window.__dxbi");
 // the phone app's own entry (Home's billboard and rows as data), and what it builds on
 const phone = block(api, "    phone: {");
-for (const name of ["billboard", "myList", "forYou", "airing", "layout", "viewers", "reviews"]) {
+for (const name of ["billboard", "myList", "forYou", "airing", "layout", "viewers", "reviews", "streams", "play"]) {
   assert.match(phone, new RegExp(`\\n\\s+(async\\s+)?${name}\\(`), `api.phone.${name}`);
 }
 for (const [owner, method] of [["hero", "load"], ["hero", "background"], ["myList", "groups"], ["forYou", "seed"], ["forYou", "saved"], ["forYou", "load"],
   ["episodes", "refresh"], ["homeLayout", "data"], ["homeLayout", "save"], ["viewers", "current"], ["viewers", "list"], ["viewers", "select"],
-  ["reviews", "load"], ["reviews", "wikipedia"], ["reviews", "tmdb"]]) {
+  ["reviews", "load"], ["reviews", "wikipedia"], ["reviews", "tmdb"], ["quickPlay", "memory"], ["quickPlay", "play"], ["streamChoice", "choose"], ["streamChoice", "spares"]]) {
   assert.match(block(plugin, `  const ${owner} = {`), new RegExp(`\\n    (async )?${method}\\(`), `${owner}.${method} (used by api.phone or the phone app)`);
 }
 console.log("PASS the plugin's api has what the phone app calls");

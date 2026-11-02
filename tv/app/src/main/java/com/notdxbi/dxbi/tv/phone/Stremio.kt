@@ -179,6 +179,15 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
 
     fun removeFromContinue(id: String) = scope.launch { ask("dismiss", JSONObject().put("id", id)) }
 
+    /** The open title's streams, described by dx.bi, with Just press Play's pick */
+    suspend fun streams(): StreamChoices? = (dx("phone.streams") as? JSONObject)?.let(StreamChoices::from)
+
+    /** Plays one of [streams] (dx.bi keeps the next best ready in case it won't play) */
+    fun play(option: StreamOption) = scope.launch {
+        val link = dx("phone.play", option.index) as? String ?: option.play
+        ask("play", JSONObject().put("link", link))
+    }
+
     /** Plays through Stremio's player route, which dxbi-tv.js hands to the native player */
     fun play(stream: Stream) = scope.launch {
         stream.play?.let { ask("play", JSONObject().put("link", it)) }
@@ -237,7 +246,19 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
         return answer.second?.optJSONObject("error")?.text("message") ?: "That email and password didn't work."
     }
 
-    fun signOut() = scope.launch { ask("signOut") }
+    fun signOut() = scope.launch {
+        guest.value = false
+        cache.edit().putBoolean("guest", false).apply()
+        ask("signOut")
+    }
+
+    /** Browsing without an account (Stremio allows it: no sync, no library on other devices) */
+    val guest = MutableStateFlow(cache.getBoolean("guest", false))
+
+    fun continueAsGuest() {
+        guest.value = true
+        cache.edit().putBoolean("guest", true).apply()
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Addons

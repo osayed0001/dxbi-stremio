@@ -142,6 +142,56 @@ data class Stream(
     }
 }
 
+/** A stream as dx.bi's stream list reads it (api.phone.streams: describeStream in the plugin) */
+data class StreamOption(
+    val index: Int,
+    val play: String,
+    val addon: String,
+    val filename: String,
+    val label: String,
+    val torrent: Boolean,
+    val provider: String,
+    val site: String,
+    val codec: String,
+    val instant: Boolean,
+    val pending: Boolean,
+    val lesser: Boolean,
+    val res: Int,
+    val hdr: Boolean,
+    val dv: Boolean,
+    val size: Double,
+    val seeds: Int,
+    val source: String,
+    val langs: List<String>,
+) {
+    val quality: String get() = when (res) { 2160 -> "4K"; 1440 -> "1440p"; 1080 -> "1080p"; 720 -> "720p"; 0 -> "?"; else -> "SD" }
+    val sizeText: String? get() = if (size <= 0) null else if (size >= 1e9) "%.1f GB".format(size / 1e9) else "%.0f MB".format(size / 1e6)
+
+    /** dx.bi's order of "best": ready to play, then quality, HDR before Dolby Vision, a good source */
+    val rank: Double get() = (if (instant) 1e5 else 0.0) + res * 10 + (if (dv) 1 else if (hdr) 2 else 0) +
+        (SOURCE_RANK[source] ?: 0) - (if (lesser) 15000 else 0) - (if (source == "CAM") 30000 else 0)
+
+    companion object {
+        private val SOURCE_RANK = mapOf("BluRay" to 3, "WEB" to 3, "Remux" to 2, "HDTV" to 1)
+        fun from(i: Int, o: JSONObject) = StreamOption(
+            i, o.optString("play"), o.optString("addon"), o.optString("filename"), o.optString("label"), o.optBoolean("torrent"), o.optString("provider"), o.optString("site"),
+            o.optString("codec"), o.optBoolean("instant"), o.optBoolean("pending"), o.optBoolean("lesser"), o.optInt("res"), o.optBoolean("hdr"),
+            o.optBoolean("dv"), o.optDouble("size", 0.0), o.optInt("seeds", -1), o.optString("source"), o.optJSONArray("langs").strings(),
+        )
+    }
+}
+
+data class StreamChoices(val justPlay: Boolean, val settled: Boolean, val videoId: String?, val pick: Int, val sameAsLastTime: Boolean, val items: List<StreamOption>) {
+    val picked: StreamOption? get() = items.getOrNull(pick)
+
+    companion object {
+        fun from(o: JSONObject) = StreamChoices(
+            o.optBoolean("justPlay"), o.optBoolean("settled"), o.text("videoId"), o.optInt("pick", -1), o.optString("how") == "same",
+            o.optJSONArray("items").objects().mapIndexed(StreamOption::from),
+        )
+    }
+}
+
 data class StreamGroup(val addon: String, val state: Load, val streams: List<Stream>)
 
 data class Details(
@@ -184,7 +234,13 @@ data class Details(
     }
 }
 
-data class Discover(val request: JSONObject?, val catalogs: List<String>, val genres: List<String>, val state: Load, val items: List<Title>, val nextPage: Boolean) {
+/** Something Discover can switch to: a type or a catalog, with the link that loads it */
+data class Pickable(val name: String, val selected: Boolean, val link: String?)
+
+data class Discover(
+    val request: JSONObject?, val types: List<Pickable>, val catalogs: List<Pickable>, val genres: List<String>,
+    val state: Load, val items: List<Title>, val nextPage: Boolean,
+) {
     val genre: String? get() = request?.optJSONObject("path")?.optJSONArray("extra")?.let { extra ->
         (0 until extra.length()).mapNotNull { extra.optJSONArray(it) }.firstOrNull { it.optString(0) == "genre" }?.optString(1)
     }
@@ -193,7 +249,11 @@ data class Discover(val request: JSONObject?, val catalogs: List<String>, val ge
         fun from(o: JSONObject?) = o?.let {
             Discover(
                 it.optJSONObject("request"),
-                it.optJSONArray("catalogs").objects().map { c -> c.optString("name") },
+                it.optJSONArray("types").objects().map { t -> Pickable(t.optString("type"), t.optBoolean("selected"), t.text("link")) },
+                it.optJSONArray("catalogs").objects().map { c ->
+                    val addon = c.optString("addon")
+                    Pickable(if (addon.isNotEmpty() && addon != "Cinemeta") "${c.optString("name")} · $addon" else c.optString("name"), c.optBoolean("selected"), c.text("link"))
+                },
                 it.optJSONArray("genres").strings(),
                 load(it),
                 it.optJSONArray("items").objects().map(Title::from),

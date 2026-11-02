@@ -1,6 +1,10 @@
 package com.notdxbi.dxbi.tv.phone
 
 import android.net.Uri
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -27,12 +31,12 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Whatshot
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +75,6 @@ import com.notdxbi.dxbi.tv.phone.ui.HomeScreen
 import com.notdxbi.dxbi.tv.phone.ui.LibraryScreen
 import com.notdxbi.dxbi.tv.phone.ui.LocalBarSpace
 import com.notdxbi.dxbi.tv.phone.ui.Logo
-import com.notdxbi.dxbi.tv.phone.ui.NewHotScreen
 import com.notdxbi.dxbi.tv.phone.ui.PlaybackSettingsScreen
 import com.notdxbi.dxbi.tv.phone.ui.ProfileScreen
 import com.notdxbi.dxbi.tv.phone.ui.SearchScreen
@@ -85,14 +88,16 @@ import dev.chrisbanes.haze.hazeChild
 
 private enum class Tab(val route: String, val label: String, val on: ImageVector, val off: ImageVector) {
     Home("home", "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    NewHot("newhot", "New & Hot", Icons.Filled.Whatshot, Icons.Outlined.Whatshot),
+    Discover("discover", "Discover", Icons.Filled.Explore, Icons.Outlined.Explore),
     Search("search", "Search", Icons.Filled.Search, Icons.Outlined.Search),
     Addons("addons", "Addons", Icons.Filled.Extension, Icons.Outlined.Extension),
     Profile("profile", "Profile", Icons.Filled.Person, Icons.Outlined.Person),
 }
 
-/** How much of the screen's bottom the floating tab bar covers (screens leave this much room) */
+/** How much of the screen's bottom the tab bar covers (screens leave this much room) */
 private val BarSpace = 96.dp
+
+private const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
 
 /**
  * dx.bi on a phone: native screens over Stremio's page, which keeps doing Stremio's work underneath
@@ -106,10 +111,11 @@ fun PhoneApp(engine: Engine) {
     DxTheme {
         val account by stremio.account.collectAsState()
         val ready by stremio.ready.collectAsState()
+        val guest by stremio.guest.collectAsState()
         val a = account
         when {
             a == null && !ready -> Starting()
-            a != null && !a.signedIn -> SignInScreen(stremio)
+            a != null && !a.signedIn && !guest -> SignInScreen(stremio)
             else -> Screens(stremio)
         }
     }
@@ -149,9 +155,14 @@ private fun Screens(stremio: Stremio) {
     val route = entry?.destination?.route.orEmpty()
     val tab = Tab.entries.firstOrNull { route.substringBefore('?') == it.route }
     val haze = remember { HazeState() }
+    val config = LocalConfiguration.current
+    // on its side, the tabs go down the left: the screen's height is too precious for a bar
+    val sideways = config.screenWidthDp > config.screenHeightDp
 
-    Box(Modifier.fillMaxSize().background(Dx.Background)) {
-        CompositionLocalProvider(LocalBarSpace provides if (tab != null) BarSpace else 0.dp) {
+    Row(Modifier.fillMaxSize().background(Dx.Background)) {
+    if (tab != null && sideways) TabRail(tab) { nav.switchTo(it) }
+    Box(Modifier.weight(1f).fillMaxHeight()) {
+        CompositionLocalProvider(LocalBarSpace provides if (tab != null && !sideways) BarSpace else 0.dp) {
             NavHost(
                 nav,
                 startDestination = Tab.Home.route,
@@ -170,7 +181,10 @@ private fun Screens(stremio: Stremio) {
                         onCategories = { type -> nav.navigate("discover?type=$type") },
                     )
                 }
-                composable(Tab.NewHot.route) { NewHotScreen(stremio, onOpen = { nav.openTitle(it) }) }
+                composable(Tab.Discover.route) {
+                    LaunchedEffect(Unit) { if (stremio.discover.value == null) stremio.discover(CINEMETA, "movie", "top") }
+                    DiscoverScreen(stremio, "Discover", onBack = null, onOpen = { nav.openTitle(it) })
+                }
                 composable(
                     "search?q={q}&focus={focus}",
                     arguments = listOf(navArgument("q") { defaultValue = "" }, navArgument("focus") { type = NavType.BoolType; defaultValue = false }),
@@ -219,7 +233,7 @@ private fun Screens(stremio: Stremio) {
                     val rows by stremio.rows.collectAsState()
                     LaunchedEffect(link, type) {
                         if (link.isNotEmpty()) stremio.discover(link)
-                        else stremio.discover("https://v3-cinemeta.strem.io/manifest.json", type.ifEmpty { "movie" }, "top")
+                        else stremio.discover(CINEMETA, type.ifEmpty { "movie" }, "top")
                     }
                     val title = rows.firstOrNull { it.discover == link }?.name
                         ?: if (type == "series") "Series" else if (type.isNotEmpty()) "Films" else "Browse"
@@ -232,24 +246,26 @@ private fun Screens(stremio: Stremio) {
             }
         }
 
-        if (tab != null) TabBar(tab, haze, Modifier.align(Alignment.BottomCenter)) { nav.switchTo(it) }
+        if (tab != null && !sideways) TabBar(tab, haze, Modifier.align(Alignment.BottomCenter)) { nav.switchTo(it) }
+    }
     }
 }
 
 /**
- * The tab bar, the way Stremio's phone app has it: a frosted panel floating over the screen, outline
- * icons, and the chosen tab's icon filled in the accent colour.
+ * The tab bar, the way Stremio's phone app has it: a frosted panel over the screen, outline icons, and
+ * the chosen tab's icon filled in the accent colour. It runs edge to edge into the bottom of the
+ * screen, rounded only at the top: a display's own rounded corners would cut into a floating bar's.
  */
 @Composable
 private fun TabBar(current: Tab, haze: HazeState, modifier: Modifier, onSelect: (Tab) -> Unit) {
     val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     Row(
         modifier
-            .padding(horizontal = 10.dp)
             .fillMaxWidth()
             .clip(shape)
             .hazeChild(haze, style = HazeStyle(backgroundColor = Dx.Background, tint = HazeTint(Color(0xB3141418)), blurRadius = 24.dp, noiseFactor = 0f))
             .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .padding(horizontal = 6.dp)
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(top = 8.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -269,6 +285,28 @@ private fun TabBar(current: Tab, haze: HazeState, modifier: Modifier, onSelect: 
                     fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1,
                 )
+            }
+        }
+    }
+}
+
+/** The tabs down the left side, for a phone on its side */
+@Composable
+private fun TabRail(current: Tab, onSelect: (Tab) -> Unit) {
+    Column(
+        Modifier.fillMaxHeight().width(84.dp).background(Dx.Surface).windowInsetsPadding(WindowInsets.safeDrawing),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Tab.entries.forEach { t ->
+            val on = t == current
+            Column(
+                Modifier.fillMaxWidth().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(t) }.padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(if (on) t.on else t.off, contentDescription = t.label, tint = if (on) Dx.Accent else Dx.Muted, modifier = Modifier.size(26.dp))
+                Spacer(Modifier.height(3.dp))
+                Text(t.label, color = if (on) Dx.Text else Dx.Muted, style = MaterialTheme.typography.labelSmall, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
             }
         }
     }

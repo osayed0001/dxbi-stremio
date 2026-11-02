@@ -170,7 +170,9 @@
       const genre = (selectable.extra || []).find((e) => e.name === "genre");
       return {
         request: (s.selected && s.selected.request) || null,
-        catalogs: (selectable.catalogs || []).map((c) => ({ name: c.name, selected: !!c.selected })),
+        // what can be chosen instead, each with the Discover link that loads it
+        types: (selectable.types || []).map((t) => ({ type: t.type, selected: !!t.selected, link: (t.deepLinks && t.deepLinks.discover) || null })),
+        catalogs: (selectable.catalogs || []).map((c) => ({ name: c.name, addon: (c.addon && c.addon.manifest && c.addon.manifest.name) || "", selected: !!c.selected, link: (c.deepLinks && c.deepLinks.discover) || null })),
         genres: genre ? genre.options.map((o) => o.value).filter((v) => v) : [],
         state: loadable(content),
         items: content && content.type === "Ready" ? content.content.map(preview) : [],

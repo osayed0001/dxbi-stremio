@@ -73,81 +73,6 @@ import com.notdxbi.dxbi.tv.phone.Title
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------------------------------
-// New & Hot: what's airing from the viewer's shows, and the top 10s
-
-@Composable
-fun NewHotScreen(stremio: Stremio, onOpen: (Title) -> Unit) {
-    val airing by stremio.airing.collectAsState()
-    val rows by stremio.rows.collectAsState()
-    // (straight to the top 10s when none of their shows has an episode this week)
-    var tab by rememberSaveable { mutableStateOf(if (stremio.airing.value.isEmpty()) 1 else 0) }
-    val films = rows.firstOrNull { it.type == "movie" && it.state == Load.Ready }
-    val series = rows.firstOrNull { it.type == "series" && it.state == Load.Ready }
-    val tabs = listOf("Airing This Week", "Top 10 Series", "Top 10 Films")
-    Column(Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Text("New & Hot", style = MaterialTheme.typography.headlineMedium, color = Dx.Text, modifier = Modifier.padding(Gutter, 12.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = Gutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(tabs) { i, label ->
-                Box(
-                    Modifier.height(34.dp).clip(RoundedCornerShape(50)).background(if (tab == i) Color.White else Dx.Raised).clickable { tab = i }.padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text(label, color = if (tab == i) Color.Black else Dx.Text, style = MaterialTheme.typography.labelMedium) }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current)) {
-            when (tab) {
-                0 -> if (airing.isEmpty()) item {
-                    Text("Nothing from your shows this week. Add series to My List and their new episodes show up here.", color = Dx.Muted, modifier = Modifier.padding(Gutter))
-                } else items(airing, key = { it.id }) { a -> AiringItem(a) { onOpen(Title(a.id, "series", a.name)) } }
-                else -> {
-                    val list = (if (tab == 1) series else films)?.items.orEmpty().take(10)
-                    itemsIndexed(list, key = { _, t -> t.id }) { i, t -> TopTen(i + 1, t) { onOpen(t) } }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiringItem(a: Airing, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Gutter, vertical = 12.dp)) {
-        // the date down the side, as Netflix's Coming Soon does
-        Column(Modifier.width(52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            val day = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault()).format(java.util.Date(a.time)).uppercase()
-            val date = java.text.SimpleDateFormat("d", java.util.Locale.getDefault()).format(java.util.Date(a.time))
-            Text(day, color = Dx.Muted, style = MaterialTheme.typography.labelSmall)
-            Text(date, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = 26.sp)
-        }
-        Column(Modifier.weight(1f)) {
-            Art(a.still ?: a.background, a.name, Modifier.fillMaxWidth().aspectRatio(16f / 9f), RoundedCornerShape(6.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(a.name, color = Dx.Text, style = MaterialTheme.typography.titleMedium)
-            Text("Season ${a.season} · Episode ${a.episode}${if (a.title.isNotEmpty()) " · ${a.title}" else ""}", color = Dx.Muted, style = MaterialTheme.typography.bodySmall)
-            Text(
-                if (a.out) "Out now" + (if (a.more > 0) " · +${a.more} more this week" else "") else "${a.whenText} · ${a.countdown}",
-                color = if (a.out) Dx.Accent else Dx.Muted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopTen(rank: Int, t: Title, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Gutter, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("$rank", color = Dx.Text, fontWeight = FontWeight.Black, fontSize = 44.sp, modifier = Modifier.width(56.dp))
-        Art(t.art, t.name, Modifier.width(84.dp).aspectRatio(2f / 3f))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(t.name, color = Dx.Text, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(listOfNotNull(t.year, t.genres.firstOrNull()).joinToString(" · "), color = Dx.Muted, style = MaterialTheme.typography.bodySmall)
-            t.imdb?.let { Spacer(Modifier.height(4.dp)); ImdbBadge(it) }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------------
 // Profile: the account, its lists, and settings
 
 @Composable
@@ -172,7 +97,7 @@ fun ProfileScreen(
                     Icon(Icons.Filled.Person, contentDescription = null, tint = Dx.Muted, modifier = Modifier.size(46.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(account?.email ?: "Signed in", style = MaterialTheme.typography.titleMedium, color = Dx.Text)
+                Text(account?.email ?: "Not signed in", style = MaterialTheme.typography.titleMedium, color = Dx.Text)
             }
         }
         if (continueWatching.isNotEmpty()) item {
@@ -185,7 +110,9 @@ fun ProfileScreen(
                 Line(Icons.Filled.Tune, "Customise Home", "Order and hide Home's rows", onClick = onCustomiseHome)
                 Line(Icons.Filled.Settings, "dx.bi settings", "Rows, reviews, skipping, watch party and more", onClick = onSettings)
                 Line(Icons.Filled.Subtitles, "Playback & subtitles", "Languages, subtitles, next episode, streaming server", onClick = onStremioSettings)
-                Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", account?.email) { stremio.signOut() }
+                // (signing out of a guest session goes back to the sign-in screen)
+                if (account?.signedIn == true) Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", account?.email) { stremio.signOut() }
+                else Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign in", "Your library, progress and addons on every device") { stremio.signOut() }
             }
         }
     }
@@ -255,6 +182,9 @@ fun SignInScreen(stremio: Stremio) {
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.stremio.com/register"))) }) {
             Text("New to Stremio? Create a free account", color = Dx.Muted)
+        }
+        TextButton(onClick = { stremio.continueAsGuest() }) {
+            Text("Continue without an account", color = Dx.Faint)
         }
     }
 }
