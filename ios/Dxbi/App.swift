@@ -1,0 +1,163 @@
+import SwiftUI
+import UIKit
+import WebKit
+
+@main
+struct DxbiApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @State private var stremio: Stremio
+
+    init() {
+        // Posters and backdrops: kept so rows scroll and the app opens without fetching them again
+        URLCache.shared = URLCache(memoryCapacity: 80 << 20, diskCapacity: 600 << 20)
+        _stremio = State(initialValue: Stremio())
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environment(stremio)
+                .preferredColorScheme(.dark)
+                .tint(.white)
+        }
+    }
+}
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    /** The player turns the phone sideways; everything else turns freely */
+    static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        Self.orientations
+    }
+}
+
+enum AppTab: Hashable { case home, discover, library, search }
+
+/** Where a tab's stack can go */
+enum Route: Hashable {
+    case title(TitleRef)
+    /** A row's See All: a Discover link and the row's name */
+    case browse(link: String, name: String)
+    case library
+}
+
+struct RootView: View {
+    @Environment(Stremio.self) private var stremio
+    @State private var tab = AppTab.home
+
+    var body: some View {
+        @Bindable var stremio = stremio
+        ZStack {
+            // Stremio's page, working underneath (it has to be in the window to keep running)
+            PageHost(webView: stremio.page.webView)
+                .opacity(0.02)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .ignoresSafeArea()
+            if stremio.account?.signedIn == true || stremio.guest {
+                tabs
+            } else {
+                WelcomeView()
+            }
+        }
+        .screenBackground()
+        .overlay(alignment: .top) {
+            if let message = stremio.message {
+                Text(message)
+                    .font(.subheadline.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onTapGesture { stremio.message = nil }
+            }
+        }
+        .animation(.spring(duration: 0.35), value: stremio.message)
+        .fullScreenCover(item: $stremio.playback) { playback in
+            PlayerScreen(playback: playback)
+        }
+    }
+
+    private var tabs: some View {
+        TabView(selection: $tab) {
+            Tab("Home", systemImage: "house.fill", value: AppTab.home) {
+                Stack { HomeView() }
+            }
+            Tab("Discover", systemImage: "square.grid.2x2.fill", value: AppTab.discover) {
+                Stack { DiscoverView() }
+            }
+            Tab("Library", systemImage: "rectangle.stack.fill", value: AppTab.library) {
+                Stack { LibraryView() }
+            }
+            Tab(value: AppTab.search, role: .search) {
+                Stack { SearchView() }
+            }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+    }
+}
+
+private struct ZoomKey: EnvironmentKey {
+    static let defaultValue: Namespace.ID? = nil
+}
+
+extension EnvironmentValues {
+    /** The tab's namespace: titles open by growing out of the card that was tapped */
+    var zoom: Namespace.ID? {
+        get { self[ZoomKey.self] }
+        set { self[ZoomKey.self] = newValue }
+    }
+}
+
+/** A tab's navigation, with every screen it can open */
+struct Stack<Content: View>: View {
+    @ViewBuilder var content: Content
+    @Namespace private var zoom
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationDestination(for: Route.self) { route in
+                    Group {
+                        switch route {
+                        case .title(let ref):
+                            TitleView(ref: ref)
+                                .navigationTransition(.zoom(sourceID: ref.id, in: zoom))
+                        case .browse(let link, let name):
+                            BrowseView(link: link, name: name)
+                        case .library:
+                            LibraryView()
+                        }
+                    }
+                }
+        }
+        .environment(\.zoom, zoom)
+    }
+}
+
+extension View {
+    /** The card a title opens from (see Stack) */
+    @ViewBuilder
+    func zoomSource(_ id: String) -> some View {
+        modifier(ZoomSource(id: id))
+    }
+}
+
+private struct ZoomSource: ViewModifier {
+    var id: String
+    @Environment(\.zoom) private var zoom
+    func body(content: Content) -> some View {
+        if let zoom { content.matchedTransitionSource(id: id, in: zoom) } else { content }
+    }
+}
+
+/** The page, in the window but out of sight */
+struct PageHost: UIViewRepresentable {
+    let webView: WKWebView
+    func makeUIView(context: Context) -> WKWebView { webView }
+    func updateUIView(_ view: WKWebView, context: Context) {}
+}

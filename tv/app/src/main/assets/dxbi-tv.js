@@ -228,6 +228,8 @@
   }
 
   function toast(text, ms = 4500) {
+    // Behind the phone app's own screens the page can't be seen: the app shows it
+    if (window.__dxbiEngine && bridge.toast) { bridge.toast(TOKEN, String(text)); return; }
     ensureStyle();
     document.querySelectorAll(".dxtv-toast").forEach((n) => n.remove());
     const el = document.createElement("div");
@@ -573,6 +575,13 @@
     // on in dx.bi settings (off by default: debrid, or a computer's streaming server, is the usual way);
     // otherwise the choice is offered for this stream
     let torrent = false;
+    // (an iPhone can't download torrents itself: without a streaming server they can't play)
+    if (!url && stream.infoHash && !bridge.torrentUrl) {
+      handoff = null;
+      if (location.hash === hash) history.back();
+      toast("This is a torrent, and it needs a streaming server: set one in Settings, or pick a debrid stream.", 7000);
+      return;
+    }
     if (!url && stream.infoHash) {
       let onTv = playHereOnce === hash || readSettings(PLUGIN.replace(/\.plugin\.js$/, "")).tvTorrents === true;
       playHereOnce = null;
