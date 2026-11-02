@@ -115,7 +115,7 @@ struct PlayerScreen: View {
             if left {
                 let b = min(max(UIScreen.main.brightness - dy / 300, 0), 1)
                 UIScreen.main.brightness = b
-                level = ("sun.max.fill", b)
+                level = ("sun.max.fill", Double(b))
             } else {
                 let v = min(max(Double(SystemVolume.value) - Double(dy / 300), 0), 1)
                 SystemVolume.set(Float(v))

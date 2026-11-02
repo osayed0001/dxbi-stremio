@@ -60,7 +60,6 @@ targets:
         UIAppFonts:
           - bebas_neue.ttf
         UIUserInterfaceStyle: Dark
-        UIRequiresFullScreen: false
         ITSAppUsesNonExemptEncryption: false
         # A streaming server on the network (Stremio or dx.bi on a computer) plays torrents for the phone
         NSLocalNetworkUsageDescription: dx.bi looks for a Stremio streaming server on your network to play torrents.

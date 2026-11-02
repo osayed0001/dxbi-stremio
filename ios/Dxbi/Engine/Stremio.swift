@@ -154,6 +154,7 @@ final class Stremio {
         }
     }
 
+    @discardableResult
     private func dx(_ method: String, _ args: Any...) async -> Any? {
         await ask("dx", ["method": method, "args": args])
     }

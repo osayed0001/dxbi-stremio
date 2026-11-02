@@ -74,7 +74,7 @@ struct PartyView: View {
         }
         Section("Chat") {
             ForEach(Array(s.objects("chat").enumerated()), id: \.offset) { _, m in
-                Text("\(m.string("name")): ").bold() + Text(m.string("text"))
+                Text("\(Text(m.string("name") + ":").bold()) \(m.string("text"))")
             }
             HStack {
                 TextField("Say something", text: $message).onSubmit(say)
