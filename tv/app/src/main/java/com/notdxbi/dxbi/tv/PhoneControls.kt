@@ -214,7 +214,7 @@ class PhoneControls(
             ) {
                 val shape = if (sideways) RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp) else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                 Box(
-                    (if (sideways) Modifier.fillMaxHeight().widthIn(max = 420.dp).fillMaxWidth(0.5f) else Modifier.fillMaxWidth().heightIn(max = 460.dp))
+                    (if (sideways) Modifier.fillMaxHeight().width(420.dp) else Modifier.fillMaxWidth().heightIn(max = 460.dp))
                         .clip(shape).background(Color(0xF2141414)).windowInsetsPadding(WindowInsets.safeDrawing)
                         .pointerInput(Unit) { detectTapGestures { } },
                 ) {
