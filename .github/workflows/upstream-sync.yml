@@ -86,7 +86,9 @@ jobs:
             echo
             echo "Merge it by hand: \`git fetch upstream && git switch $WORK && git merge upstream/main\`."
           } > body.md
-          gh issue create --title "Upstream v${{ steps.fetch.outputs.version }}: merge conflict" --body-file body.md
+          # (issues may be closed to workflows on a fork: the run's summary says it either way)
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+          gh issue create --title "Upstream v${{ steps.fetch.outputs.version }}: merge conflict" --body-file body.md || true
           exit 1
 
       - uses: actions/setup-node@v4
@@ -130,9 +132,16 @@ jobs:
           range="${{ steps.fetch.outputs.range }}"
           if ! git push origin "$branch" 2> push.txt; then
             cat push.txt
-            gh issue create --title "Upstream v${{ steps.fetch.outputs.version }}: sync by hand" \
-              --body "The merge was clean, but GitHub wouldn't let the workflow push it (usually because upstream changed a workflow file). Merge it by hand: \`git fetch upstream && git switch $WORK && git merge upstream/main\`."
-            exit 1
+            # GitHub never lets a workflow's own token push changes to workflow files, and upstream
+            # sometimes edits them. Not a failure: the daily Claude review sees upstream is ahead and
+            # merges it by hand (with the owner's sign-in), so this only leaves a note
+            {
+              echo "### Upstream v${{ steps.fetch.outputs.version }} needs merging by hand"
+              echo "The merge was clean and the checks passed, but GitHub won't let a workflow push upstream's changes to workflow files."
+              echo "Merge it with \`git fetch upstream && git switch $WORK && git merge upstream/main\` (the daily review does this)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Upstream v${{ steps.fetch.outputs.version }} changes workflow files: merge it by hand"
+            exit 0
           fi
           {
             if [ "${{ steps.test.outputs.failed }}" = "1" ]; then echo "**Some checks failed:** see below before merging."; else echo "All checks passed."; fi
