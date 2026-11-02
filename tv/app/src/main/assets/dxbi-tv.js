@@ -508,7 +508,8 @@
       count[lang] = (count[lang] || 0) + 1;
       if (count[lang] > 3) continue;
       // "English", "English 2", "English 3"
-      out.push({ url: sub.url, lang, label: subtitleLabel(lang) + (count[lang] > 1 ? ` ${count[lang]}` : "") });
+      // (where it came from: the stream's own, or a subtitle addon's search by title, which may not fit this release)
+      out.push({ url: sub.url, lang, label: subtitleLabel(lang) + (count[lang] > 1 ? ` ${count[lang]}` : ""), source: sub.source || "addon" });
       if (out.length >= 45) break;
     }
     return out;
@@ -616,7 +617,10 @@
     const resumeMs = lib && lib.video_id === videoId && lib.timeOffset > 0 ? lib.timeOffset : 0;
     const headers = (stream.behaviorHints && stream.behaviorHints.proxyHeaders && stream.behaviorHints.proxyHeaders.request) || {};
     // the stream's own subtitle files first, then the subtitle addons'
-    const subtitles = await pickSubtitles([...(stream.subtitles || []), ...(state.subtitles || [])]);
+    const subtitles = await pickSubtitles([
+      ...(stream.subtitles || []).map((s) => ({ ...s, source: "stream" })),
+      ...(state.subtitles || []).map((s) => ({ ...s, source: "addon" })),
+    ]);
     const episode = video && video.season != null ? `S${video.season} E${video.episode}${video.title || video.name ? ` · ${video.title || video.name}` : ""}` : "";
 
     const profile = await profileSettings();

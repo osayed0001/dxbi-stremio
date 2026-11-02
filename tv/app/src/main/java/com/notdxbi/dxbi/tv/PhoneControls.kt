@@ -371,7 +371,15 @@ class PhoneControls(
     // -----------------------------------------------------------------------------------------------
     // Menus
 
-    private class Choice(val label: String, val on: Boolean, val enabled: Boolean = true, val pick: () -> Unit)
+    private class Choice(val label: String, val on: Boolean, val enabled: Boolean = true, val source: String = "", val pick: () -> Unit)
+
+    // where a subtitle came from (PlayerActivity gives each added file an id: "stream:3", "addon:7")
+    private fun sourceOf(id: String?) = when {
+        id == null -> IN_VIDEO
+        id.contains("stream:") -> WITH_STREAM
+        id.contains("addon:") -> FROM_ADDONS
+        else -> IN_VIDEO
+    }
 
     private fun tracks(type: Int): List<Choice> {
         val groups = exo.currentTracks.groups.filter { it.type == type }
@@ -387,7 +395,8 @@ class PhoneControls(
             val f = group.getTrackFormat(i)
             val name = f.label ?: f.language?.let { java.util.Locale.forLanguageTag(it).displayLanguage }?.takeIf { it.isNotEmpty() } ?: "Track $number"
             val extra = if (type == C.TRACK_TYPE_AUDIO) listOfNotNull(channelName(f.channelCount), audioKind(f.sampleMimeType)).joinToString(" · ") else ""
-            out += Choice(listOf(name, extra).filter { it.isNotEmpty() }.joinToString(" · ") + if (!supported) " · can't play here" else "", group.isTrackSelected(i), supported) {
+            out += Choice(listOf(name, extra).filter { it.isNotEmpty() }.joinToString(" · ") + if (!supported) " · can't play here" else "", group.isTrackSelected(i), supported,
+                source = if (type == C.TRACK_TYPE_TEXT) sourceOf(f.id) else "") {
                 exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type, false)
                     .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i)).build()
             }
@@ -404,7 +413,19 @@ class PhoneControls(
         val subsColumn: @Composable (Modifier) -> Unit = { m ->
             Column(m) {
                 Heading("Subtitles")
-                LazyColumn(Modifier.weight(1f, fill = false)) { items(subs) { @Suppress("UNUSED_EXPRESSION") now; ChoiceRow(it) } }
+                // the file's own first (they match it), then the stream's, then subtitle addons' (found by title)
+                LazyColumn(Modifier.weight(1f, fill = false)) {
+                    items(subs.filter { it.source == "" }) { @Suppress("UNUSED_EXPRESSION") now; ChoiceRow(it) }
+                    for (source in listOf(IN_VIDEO, WITH_STREAM, FROM_ADDONS)) {
+                        val here = subs.filter { it.source == source }
+                        if (here.isEmpty()) continue
+                        item(key = source) {
+                            Text(source + if (source == FROM_ADDONS) " · may not match this video" else "",
+                                color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(start = 38.dp, top = 10.dp, bottom = 2.dp))
+                        }
+                        items(here) { @Suppress("UNUSED_EXPRESSION") now; ChoiceRow(it) }
+                    }
+                }
                 if (subs.any { it.on && it.label != "Off" }) {
                     Heading("Timing" + if (delay != 0L) " · %+.2f s".format(delay / 1000f) else "")
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -562,6 +583,12 @@ class PhoneControls(
         8 -> "7.1"
         in 3..32 -> "$count channels"
         else -> null
+    }
+
+    private companion object {
+        const val IN_VIDEO = "In the video"
+        const val WITH_STREAM = "With this stream"
+        const val FROM_ADDONS = "From subtitle addons"
     }
 
     private fun clock(ms: Long): String {

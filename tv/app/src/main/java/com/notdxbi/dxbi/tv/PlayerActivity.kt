@@ -344,6 +344,8 @@ class PlayerActivity : AppCompatActivity() {
                 val s = list.optJSONObject(i) ?: continue
                 val subUrl = s.optString("url").takeIf { it.isNotEmpty() } ?: continue
                 subtitles += MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                    // where it came from, for the phone's subtitle menu ("stream:3", "addon:7")
+                    .setId("${s.optString("source", "addon")}:$i")
                     .setMimeType(subtitleMime(subUrl))
                     .setLanguage(s.optString("lang").ifEmpty { null })
                     .setLabel(s.optString("label").ifEmpty { s.optString("lang") })
