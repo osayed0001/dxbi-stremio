@@ -23,9 +23,12 @@ import kotlin.concurrent.thread
  */
 object Updates {
     // The plugin from the latest release, not the main branch: unreleased work never reaches TVs
-    private const val PLUGIN_URL = "https://github.com/notdxbi/dxbi-stremio/releases/latest/download/dxbi.plugin.js"
-    private const val RELEASES_URL = "https://api.github.com/repos/notdxbi/dxbi-stremio/releases/latest"
-    private const val LATEST_PAGE = "https://github.com/notdxbi/dxbi-stremio/releases/latest"
+    private const val REPO = BuildConfig.UPDATE_REPO
+    private const val PLUGIN_URL = "https://github.com/$REPO/releases/latest/download/dxbi.plugin.js"
+    private const val RELEASES_URL = "https://api.github.com/repos/$REPO/releases/latest"
+    private const val LATEST_PAGE = "https://github.com/$REPO/releases/latest"
+    // A debug build runs the plugin it was built with: a released one fetched over it would hide the work being tested
+    private val ENABLED = !BuildConfig.DEBUG
     private const val RECHECK_MS = 6 * 60 * 60 * 1000L
     private const val APK_ASSET = "dxbi-tv.apk"
     private const val UPDATED_PLUGIN = "dxbi.plugin.js"
@@ -55,6 +58,7 @@ object Updates {
         .replace(Regex("""(\n  function anime4kShaders\(\) \{\n    return )\{[^\n]*"""), "$1{};")
 
     fun checkPlugin(context: Context) = thread(name = "dxbi-plugin-update") {
+        if (!ENABLED) return@thread
         try {
             val text = get(PLUGIN_URL) ?: return@thread
             if (!text.contains("@name dx.bi")) return@thread
@@ -102,13 +106,13 @@ object Updates {
         val tag = http.newCall(Request.Builder().url(LATEST_PAGE).head().build()).execute().use { it.request.url.pathSegments.lastOrNull() }
         val version = tag?.takeIf { it.startsWith("v") }?.removePrefix("v") ?: return null
         // That release's own copy (just after a release, "latest" can differ from page to file), once attached
-        val url = "https://github.com/notdxbi/dxbi-stremio/releases/download/$tag/$APK_ASSET"
+        val url = "https://github.com/$REPO/releases/download/$tag/$APK_ASSET"
         val found = http.newCall(Request.Builder().url(url).head().build()).execute().use { it.isSuccessful }
         return if (found) Latest(version, url, -1) else null
     }
 
     fun checkApp(activity: MainActivity) = thread(name = "dxbi-app-update") {
-        if (offering) return@thread
+        if (offering || !ENABLED) return@thread
         lastCheck = System.currentTimeMillis()
         try {
             val found = try { fromApi() } catch (_: Exception) { null } ?: fromPage() ?: return@thread
@@ -179,7 +183,7 @@ object Updates {
                     if (activity.isFinishing) return@runOnUiThread
                     AlertDialog.Builder(activity)
                         .setTitle("The update didn't download")
-                        .setMessage("${e.message}\n\nTry again later, or install it with the Downloader app from:\ngithub.com/notdxbi/dxbi-stremio/releases/latest/download/dxbi-tv.apk")
+                        .setMessage("${e.message}\n\nTry again later, or install it with the Downloader app from:\ngithub.com/$REPO/releases/latest/download/dxbi-tv.apk")
                         .setPositiveButton("OK", null)
                         .show()
                 }

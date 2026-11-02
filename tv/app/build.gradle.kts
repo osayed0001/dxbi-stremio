@@ -17,6 +17,10 @@ val keystoreProps = Properties().apply {
 }
 fun signingValue(key: String, env: String): String? = keystoreProps.getProperty(key) ?: System.getenv(env)
 
+// Where the app looks for its updates: the repository it was built from (GitHub Actions says which), so
+// a fork's TVs follow the fork's own releases rather than being offered builds signed with another key
+val updateRepo = System.getenv("DXBI_UPDATE_REPO") ?: System.getenv("GITHUB_REPOSITORY") ?: "notdxbi/dxbi-stremio"
+
 android {
     namespace = "com.notdxbi.dxbi.tv"
     compileSdk = 35
@@ -27,6 +31,11 @@ android {
         targetSdk = 35
         versionName = dxbiVersion
         versionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
+        buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
@@ -43,6 +52,9 @@ android {
 
     buildTypes {
         debug {
+            // Installs next to the released app (a different key can't replace it) and keeps its own data
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
             // the emulator is x86
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
         }
