@@ -20,8 +20,8 @@ import kotlin.math.roundToInt
 
 /**
  * Phones: the player by touch, the way streaming apps do it.
- *  - a tap shows or hides the controls
- *  - a double tap on the left or right skips back or forward (keep tapping for more), in the middle plays or pauses
+ *  - a tap in the middle plays or pauses; anywhere else it shows or hides the controls
+ *  - a double tap on the left or right skips back or forward (keep tapping for more)
  *  - sliding sideways seeks, with where it'll land shown until the finger lifts
  *  - sliding up or down: brightness on the left, volume on the right
  *  - pinching zooms the picture to fill the screen, or back to all of it
@@ -41,8 +41,6 @@ class PlayerGestures(
 
     private val handler = Handler(Looper.getMainLooper())
     private val audio = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val unlock: View = activity.findViewById(R.id.unlock)
-    private val hideUnlock = Runnable { unlock.visibility = View.GONE }
     private val slop = 24 * activity.resources.displayMetrics.density
 
     var locked = false
@@ -62,27 +60,33 @@ class PlayerGestures(
     private var holdSpeed = 2f
     private val step = 36 * activity.resources.displayMetrics.density
 
-    init {
-        unlock.setOnClickListener {
-            locked = false
-            unlock.visibility = View.GONE
-            flash("Unlocked", 900)
-            controls.show()
-        }
-    }
+    /** A tap while locked: the controls bring up the unlock button, where the lock button was */
+    var onLockedTap: () -> Unit = {}
 
-    /** Ignores every touch until the unlock button (a tap brings it up) is pressed */
+    /** Ignores every touch (but a tap, for the unlock button) until [unlock] */
     fun lock() {
         locked = true
         controls.hide()
-        flash("Screen locked: tap, then the lock to unlock", 1800)
+        flash("Locked · tap the screen, then the lock, to unlock", 1800)
+    }
+
+    fun unlock() {
+        locked = false
+        flash("Unlocked", 900)
     }
 
     private val taps = GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            if (controls.visible) controls.hide() else controls.show()
+            // the middle of the picture is the play button, whether or not the controls are up
+            val x = e.x / playerView.width
+            val y = e.y / playerView.height
+            if (x in 0.35f..0.65f && y in 0.3f..0.7f) {
+                exo.playWhenReady = !exo.playWhenReady
+                if (!controls.visible) flash(if (exo.playWhenReady) "▶  Playing" else "❚❚  Paused", 800)
+                else controls.poke()
+            } else if (controls.visible) controls.hide() else controls.show()
             return true
         }
 
@@ -100,14 +104,8 @@ class PlayerGestures(
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             val x = e.x / playerView.width
-            when {
-                x < 0.35f -> seek(-1)
-                x > 0.65f -> seek(+1)
-                else -> {
-                    exo.playWhenReady = !exo.playWhenReady
-                    flash(if (exo.playWhenReady) "Playing" else "Paused", 700)
-                }
-            }
+            // (the middle is a single tap: play or pause)
+            if (x < 0.35f) seek(-1) else if (x > 0.65f) seek(+1)
             return true
         }
 
@@ -180,11 +178,7 @@ class PlayerGestures(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         if (locked) {
-            if (event.action == MotionEvent.ACTION_UP) {
-                unlock.visibility = View.VISIBLE
-                handler.removeCallbacks(hideUnlock)
-                handler.postDelayed(hideUnlock, 3000)
-            }
+            if (event.action == MotionEvent.ACTION_UP) onLockedTap()
             return true
         }
         if (holding) {
@@ -231,8 +225,8 @@ class PlayerGestures(
         0.5f
     }
 
-    /** "2x ▶▶", and how to change it while holding */
-    private fun speedText(speed: Float) = "${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x  ▶▶   ‹ slide ›"
+    /** "2x ▶▶" */
+    private fun speedText(speed: Float) = "${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x  ▶▶"
 
     fun release() = handler.removeCallbacksAndMessages(null)
 

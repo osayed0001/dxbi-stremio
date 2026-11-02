@@ -273,6 +273,11 @@
       await core().dispatch({ action: "Ctx", args: add ? { action: "AddToLibrary", args: item } : { action: "RemoveFromLibrary", args: item.id } });
       push("meta_details");
     },
+    // Mark as watched / unwatched: the title open in details (a series: every episode), as Stremio's button does
+    async watched({ value }) {
+      await core().dispatch({ action: "MetaDetails", args: { action: "MarkAsWatched", args: !!value } }, "meta_details");
+      push("meta_details");
+    },
     // Continue watching: "Remove from row", as Stremio does it
     async dismiss({ id }) {
       await core().dispatch({ action: "Ctx", args: { action: "RewindLibraryItem", args: id } });

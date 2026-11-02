@@ -306,13 +306,19 @@ class PlayerActivity : AppCompatActivity() {
             leaveParty = leaveParty,
             leave = { go -> finishWith(next = go) },
             onLock = { gestures?.lock() },
+            onUnlock = { gestures?.unlock() },
             onExternal = { playElsewhere() },
         ) else PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, leaveParty) { go -> finishWith(next = go) }
         PlaybackBus.player = this
         // Phones: taps, double taps, slides and pinches (the remote still works the same everywhere)
         if (phone) {
             val touch = PlayerGestures(this, playerView, exo, controls, ::seek, ::flash).also { gestures = it }
+            touch.onLockedTap = { (controls as? PhoneControls)?.showUnlock() }
             playerView.setOnTouchListener(touch)
+            // messages (±10 s, brightness, speed…) small at the top, off the picture's middle
+            seekFlash.layoutParams = (seekFlash.layoutParams as android.widget.FrameLayout.LayoutParams).apply { topMargin = (22 * resources.displayMetrics.density).toInt() }
+            seekFlash.textSize = 14f
+            (6 * resources.displayMetrics.density).toInt().let { v -> seekFlash.setPadding(v * 2, v, v * 2, v) }
         }
         fitControls()
         findViewById<View>(R.id.up_next_play).setOnClickListener { finishWith(next = true) }

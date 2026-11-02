@@ -43,11 +43,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -110,6 +110,7 @@ class PhoneControls(
     private val leaveParty: () -> Unit,
     private val leave: (Boolean) -> Unit,
     private val onLock: () -> Unit,
+    private val onUnlock: () -> Unit,
     private val onExternal: () -> Unit,
 ) : Controls {
 
@@ -121,6 +122,28 @@ class PhoneControls(
     // what's drawn from the player, read again every quarter second while the controls are up
     private var now by mutableLongStateOf(0L)
     private var partyCode by mutableStateOf<String?>(null)
+    private var locked by mutableStateOf(false)
+    private var unlockShown by mutableStateOf(false)
+    private val hideUnlock = Runnable { unlockShown = false }
+
+    /** A tap while locked: the lock button, where it always is, for a few seconds */
+    fun showUnlock() {
+        unlockShown = true
+        handler.removeCallbacks(hideUnlock)
+        handler.postDelayed(hideUnlock, 3000)
+    }
+
+    private fun lock() {
+        locked = true
+        onLock()
+    }
+
+    private fun unlock() {
+        locked = false
+        unlockShown = false
+        onUnlock()
+        show()
+    }
     private var partyPeople by mutableStateOf<List<String>>(emptyList())
 
     private val autoHide = Runnable { if (panel == null) hide() }
@@ -192,7 +215,8 @@ class PhoneControls(
         val sideways = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
         @Suppress("UNUSED_EXPRESSION") now // redrawn with the player's progress
         Box(Modifier.fillMaxSize()) {
-            AnimatedVisibility(shown, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(locked && unlockShown, modifier = Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { Unlock(Modifier) }
+            AnimatedVisibility(shown && !locked, enter = fadeIn(), exit = fadeOut()) {
                 Box(Modifier.fillMaxSize()) {
                     // shading so white controls read over any picture (draws only: touches go through to the video)
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.75f), 0.22f to Color.Transparent, 0.62f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
@@ -248,8 +272,17 @@ class PhoneControls(
             }
             // (upright, the title needs the room: the time goes down by the seek bar)
             if (showClock && sideways) Text(endsAt(), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, modifier = Modifier.padding(end = 4.dp))
-            Button(Icons.AutoMirrored.Filled.OpenInNew, "Play in another app") { onExternal() }
-            Button(Icons.Filled.Lock, "Lock the screen") { onLock() }
+            Button(Icons.Filled.LockOpen, "Lock the screen") { lock() }
+        }
+    }
+
+    /** While locked: nothing but the lock, in the lock button's place */
+    @Composable
+    private fun Unlock(modifier: Modifier) {
+        Row(modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+            Box(Modifier.size(48.dp).clip(CircleShape).background(Color(accent)).clickable { unlock() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Lock, contentDescription = "Unlock the screen", tint = Color.White, modifier = Modifier.size(26.dp))
+            }
         }
     }
 
@@ -371,7 +404,7 @@ class PhoneControls(
         val subsColumn: @Composable (Modifier) -> Unit = { m ->
             Column(m) {
                 Heading("Subtitles")
-                LazyColumn(Modifier.weight(1f, fill = false)) { items(subs) { ChoiceRow(it) } }
+                LazyColumn(Modifier.weight(1f, fill = false)) { items(subs) { @Suppress("UNUSED_EXPRESSION") now; ChoiceRow(it) } }
                 if (subs.any { it.on && it.label != "Off" }) {
                     Heading("Timing" + if (delay != 0L) " · %+.2f s".format(delay / 1000f) else "")
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -385,7 +418,7 @@ class PhoneControls(
             Column(m) {
                 Heading("Audio")
                 if (audio.isEmpty()) Text("No other audio", color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(12.dp))
-                LazyColumn { items(audio) { ChoiceRow(it) } }
+                LazyColumn { items(audio) { @Suppress("UNUSED_EXPRESSION") now; ChoiceRow(it) } }
             }
         }
         if (sideways) Row(Modifier.fillMaxSize().padding(8.dp)) {
@@ -404,6 +437,7 @@ class PhoneControls(
             Heading("Playback speed · hold the video to speed up")
             LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)) { s ->
+                    @Suppress("UNUSED_EXPRESSION") now
                     Pill(if (s == 1f) "1x" else "${s}x", on = exo.playbackParameters.speed == s) { exo.setPlaybackSpeed(s); now = System.currentTimeMillis() }
                 }
             }
@@ -423,6 +457,7 @@ class PhoneControls(
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("Fit" to AspectRatioFrameLayout.RESIZE_MODE_FIT, "Fill" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM, "Stretch" to AspectRatioFrameLayout.RESIZE_MODE_FILL)) { (name, mode) ->
+                        @Suppress("UNUSED_EXPRESSION") now // (each choice redraws when one is picked)
                         Pill(name, on = playerView.resizeMode == mode) { playerView.resizeMode = mode; now = System.currentTimeMillis() }
                     }
                 }
@@ -431,11 +466,16 @@ class PhoneControls(
             item {
                 val zooms = listOfNotNull("off" to "Off", ("auto" to "Remove black bars").takeIf { zoom.canMeasure }, "1.1" to "110%", "1.25" to "125%", "1.33" to "133%")
                 LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(zooms) { (value, name) -> Pill(name, on = zoom.mode == value) { zoom.set(value); now = System.currentTimeMillis() } }
+                    items(zooms) { (value, name) ->
+                        @Suppress("UNUSED_EXPRESSION") now
+                        Pill(name, on = zoom.mode == value) { zoom.set(value); now = System.currentTimeMillis() }
+                    }
                 }
             }
             item { Heading("Sound") }
-            items(SoundMode.MODES) { mode -> ChoiceRow(Choice(mode.label, sound.mode === mode) { sound.mode = mode; now = System.currentTimeMillis() }) }
+            items(SoundMode.MODES) { mode ->
+                @Suppress("UNUSED_EXPRESSION") now
+                ChoiceRow(Choice(mode.label, sound.mode === mode) { sound.mode = mode; now = System.currentTimeMillis() }) }
             item { Heading("Stream") }
             item { Text(stats(), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) }
             item { ChoiceRow(Choice("Play in another app", false) { onExternal() }) }

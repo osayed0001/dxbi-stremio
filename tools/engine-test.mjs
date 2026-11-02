@@ -209,3 +209,8 @@ states.ctx.profile.settings = { audioLanguage: "eng", subtitlesSize: 100 };
 await ask(36, "updateSettings", { changes: { subtitlesSize: 150 } });
 assert.deepEqual(dispatched.at(-1).action.args, { action: "UpdateSettings", args: { audioLanguage: "eng", subtitlesSize: 150 } }, "the rest of the settings kept");
 console.log("PASS addons and Stremio's settings");
+
+// Mark as watched: the title open in details, as Stremio's own button does it
+await ask(40, "watched", { value: true });
+assert.deepEqual(dispatched.at(-1), { action: { action: "MetaDetails", args: { action: "MarkAsWatched", args: true } }, field: "meta_details" });
+console.log("PASS mark as watched");

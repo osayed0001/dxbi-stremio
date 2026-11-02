@@ -28,6 +28,7 @@ data class Title(
     val genres: List<String> = emptyList(),
     val description: String? = null,
     val inLibrary: Boolean = false,
+    val watched: Boolean = false,
     val trailer: String? = null,
 ) {
     /** Art for a card: the poster, or for titles without one the backdrop */
@@ -49,6 +50,7 @@ data class Title(
             genres = o.optJSONArray("genres").strings(),
             description = o.text("description"),
             inLibrary = o.optBoolean("inLibrary"),
+            watched = o.optBoolean("watched"),
             trailer = o.text("trailer"),
         )
     }

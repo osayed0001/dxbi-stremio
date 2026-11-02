@@ -190,6 +190,8 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
         refreshExtras()
     }
 
+    fun setWatched(watched: Boolean) = scope.launch { ask("watched", JSONObject().put("value", watched)) }
+
     fun removeFromContinue(id: String) = scope.launch { ask("dismiss", JSONObject().put("id", id)) }
 
     /** The open title's streams, described by dx.bi, with Just press Play's pick */

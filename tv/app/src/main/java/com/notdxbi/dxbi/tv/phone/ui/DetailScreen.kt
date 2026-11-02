@@ -35,6 +35,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Theaters
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,7 +76,6 @@ import kotlinx.coroutines.delay
 import com.notdxbi.dxbi.tv.phone.StreamOption
 import com.notdxbi.dxbi.tv.phone.StreamChoices
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.asPaddingValues
@@ -115,6 +118,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
     LaunchedEffect(type, id) { stremio.open(type, id) }
     // scores and reviews (with the TMDB and MDBList keys from dx.bi settings), fetched alongside
     var reviews by remember(type, id) { mutableStateOf<Reviews?>(null) }
+    var reviewsOpen by rememberSaveable(type, id) { mutableStateOf(false) }
     LaunchedEffect(type, id) { reviews = stremio.reviews(type, id) }
 
     /** What Play starts: the episode they're in the middle of, else the first one */
@@ -188,10 +192,14 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
         item { Header(title, details, onPlay = { start(details?.let { nextVideo(it)?.id }) }) }
         reviews?.scores?.takeIf { it.isNotEmpty() }?.let { scores -> item { ScoreBadges(scores) } }
         item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            // (the buttons share the width: five don't fit side by side at a fixed spacing)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 val inList = details?.title?.inLibrary == true
-                Action(if (inList) Icons.Filled.Check else Icons.Filled.Add, "My List", enabled = details?.state == Load.Ready) { stremio.setInList(!inList) }
-                Action(Icons.AutoMirrored.Filled.List, "Streams") { start(null) }
+                val ready = details?.state == Load.Ready
+                Action(if (inList) Icons.Filled.Check else Icons.Filled.Add, if (inList) "In Library" else "Library", enabled = ready) { stremio.setInList(!inList) }
+                val watched = details?.title?.watched == true
+                Action(if (watched) Icons.Filled.Visibility else Icons.Outlined.VisibilityOff, if (watched) "Watched" else "Mark watched", enabled = ready) { stremio.setWatched(!watched) }
+                Action(if (reviewsOpen) Icons.Filled.Star else Icons.Outlined.StarBorder, "Reviews") { reviewsOpen = !reviewsOpen }
                 title.trailer?.let { yt ->
                     Action(Icons.Filled.Theaters, "Trailer") {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$yt")))
@@ -201,6 +209,17 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                     val link = if (id.startsWith("tt")) "https://www.imdb.com/title/$id" else title.name
                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "${title.name} $link"), null))
                 }
+            }
+        }
+        // reviews when asked for (the ★ button): what critics said, and audience reviews
+        if (reviewsOpen) item {
+            val r = reviews
+            when {
+                r == null -> Text("Gathering reviews…", color = Dx.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(Gutter, 14.dp))
+                r.critics.isEmpty() && r.audience.isEmpty() && r.audienceProblem == null && r.problem == null ->
+                    Text("No reviews found for this one yet." + if ("tmdb" in r.missing) " A TMDB key in dx.bi settings adds audience reviews." else "",
+                        color = Dx.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(Gutter, 14.dp))
+                else -> ReviewsSection(r)
             }
         }
         if (details == null || details.state == Load.Loading) item {
@@ -214,7 +233,6 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                 Episode(v, resumeHere = v.id == details.resumeVideoId) { start(v.id) }
             }
         }
-        reviews?.let { r -> if (r.critics.isNotEmpty() || r.audience.isNotEmpty() || r.audienceProblem != null || r.problem != null) item { ReviewsSection(r) } }
         if (details != null && details.cast.isNotEmpty()) item {
             Column(Modifier.padding(horizontal = Gutter, vertical = 16.dp)) {
                 Text("Cast", style = MaterialTheme.typography.titleSmall, color = Dx.Text)
@@ -353,12 +371,12 @@ fun shortRuntime(runtime: String): String {
 @Composable
 private fun Action(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Column(
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp),
+        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = label, tint = if (enabled) Dx.Text else Dx.Faint, modifier = Modifier.size(26.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, color = Dx.Muted, style = MaterialTheme.typography.bodySmall)
+        Text(label, color = Dx.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
     }
 }
 

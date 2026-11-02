@@ -195,7 +195,8 @@ private fun Screens(stremio: Stremio) {
                     )
                 }
                 composable(Tab.Discover.route) {
-                    LaunchedEffect(Unit) { if (stremio.discover.value == null) stremio.discover(CINEMETA, "movie", "top") }
+                    // Popular films to start with (the model is there, empty, before anything is chosen)
+                    LaunchedEffect(Unit) { if (stremio.discover.value?.request == null) stremio.discover(CINEMETA, "movie", "top") }
                     DiscoverScreen(stremio, "Discover", onBack = null, onOpen = { nav.openTitle(it) })
                 }
                 composable(
