@@ -23,7 +23,10 @@ jobs:
     if: github.repository != 'notdxbi/dxbi-stremio'
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
+      # SYNC_TOKEN (a fine-grained token in the fork's secrets, with Workflows access) lets the run push
+      # upstream's workflow changes too, and its pull requests run the fork's checks; without it, the
+      # workflow's own token, which can't
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
       UPSTREAM: https://github.com/notdxbi/dxbi-stremio
       WORK: mobile
     steps:
@@ -31,6 +34,7 @@ jobs:
         with:
           ref: ${{ env.WORK }}
           fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
 
       - name: Fetch upstream
         id: fetch
