@@ -23,6 +23,9 @@ import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.ui.platform.ComposeView
+import com.notdxbi.dxbi.tv.phone.Engine
+import com.notdxbi.dxbi.tv.phone.PhoneApp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -40,6 +43,11 @@ class MainActivity : AppCompatActivity() {
     private var lastBack = 0L
     private var playbackListener: PlaybackBus.Listener? = null
     private var intro: Intro? = null
+
+    /** Phones: the native screens drawn over the page, and their way into it (null on TVs) */
+    var engine: Engine? = null
+        private set
+    private var phoneUi: ComposeView? = null
 
     /**
      * A 4K TV would draw the page at 3840 px, four times the work and memory of 1080p, on hardware
@@ -74,6 +82,15 @@ class MainActivity : AppCompatActivity() {
         val root = FrameLayout(this)
         root.addView(web, webSize())
         setContentView(root)
+        // Phones get native screens over the page, which keeps doing Stremio's work underneath (laid out
+        // and running, just covered). For now only debug builds, while the screens are being built.
+        if (BuildConfig.DEBUG && Bridge(this).isPhone()) {
+            val engine = Engine(::js).also { engine = it }
+            phoneUi = ComposeView(this).apply {
+                setContent { PhoneApp(engine, showPage = { visible -> this.visibility = if (visible) View.GONE else View.VISIBLE }) }
+            }
+            root.addView(phoneUi, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        }
         // Only when dx.bi is opened, not when the screen is rebuilt (after a page crash, a turned phone)
         if (savedInstanceState == null) intro = Intro(this, root).also { it.start() }
         web.setBackgroundColor(getColor(R.color.background))
@@ -97,7 +114,9 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
 
         web.addJavascriptInterface(Bridge(this), "DxbiTV")
-        val startScript = assets.open("dxbi-tv.js").bufferedReader().use { it.readText() }.replace(Bridge.PLACEHOLDER, Bridge.TOKEN)
+        var startScript = assets.open("dxbi-tv.js").bufferedReader().use { it.readText() }
+        if (engine != null) startScript += "\n" + assets.open("dxbi-engine.js").bufferedReader().use { it.readText() }
+        startScript = startScript.replace(Bridge.PLACEHOLDER, Bridge.TOKEN)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, startScript, setOf(STREMIO_ORIGIN))
             injectedAtStart = true
@@ -116,6 +135,7 @@ class MainActivity : AppCompatActivity() {
             // The page's engine crashed, or Android took its memory back (TVs with 1.5–2 GB): without
             // this, Android closes dx.bi straight back to the home screen
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                engine?.onMessage("""{"type":"gone"}""")
                 recoverFromCrash(detail.didCrash())
                 return true
             }

@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // The TV app shares dx.bi's version number: it's read from the plugin at the repository root
@@ -36,6 +37,8 @@ android {
 
     buildFeatures {
         buildConfig = true
+        // The phone app's screens (TVs keep Stremio's page)
+        compose = true
     }
 
     signingConfigs {
@@ -112,4 +115,15 @@ dependencies {
     implementation("org.libtorrent4j:libtorrent4j-android-x86:2.1.0-39")
     implementation("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    // Phones: native screens drawn with Compose, over the page that does Stremio's work
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.ui:ui-tooling-preview")
 }
