@@ -1,0 +1,151 @@
+name: Upstream sync
+
+# Fork only: keeps this fork current with notdxbi/dxbi-stremio.
+#   - main is fast-forwarded to upstream's main (main is a mirror: nothing of the fork's goes on it)
+#   - when upstream has something mobile doesn't, it's merged into sync/<version>-<commit>, tested,
+#     and offered as a pull request into mobile ("Upstream vX.Y.Z"), with the test results
+#   - a merge conflict, or a change GitHub won't let this token push (upstream editing workflows),
+#     opens an issue instead, to be synced by hand
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency: upstream-sync
+
+jobs:
+  sync:
+    if: github.repository != 'notdxbi/dxbi-stremio'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: https://github.com/notdxbi/dxbi-stremio
+      WORK: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.WORK }}
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        id: fetch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM"
+          git fetch --no-tags upstream main
+          # main stays a mirror of upstream
+          git push origin upstream/main:refs/heads/main || echo "::warning::main has commits of its own, so it wasn't fast-forwarded"
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Nothing new upstream"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=$(git show upstream/main:dxbi.plugin.js | grep -m1 -oP '@version\s+\K[\d.]+')
+          short=$(git rev-parse --short upstream/main)
+          echo "new=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "branch=sync/v$version-$short" >> "$GITHUB_OUTPUT"
+          echo "range=$(git merge-base HEAD upstream/main)..upstream/main" >> "$GITHUB_OUTPUT"
+
+      - name: Already offered?
+        id: open
+        if: steps.fetch.outputs.new == 'true'
+        run: |
+          if git ls-remote --exit-code --heads origin "${{ steps.fetch.outputs.branch }}" >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.fetch.outputs.branch }} already exists"
+          fi
+
+      - name: Merge
+        id: merge
+        if: steps.fetch.outputs.new == 'true' && steps.open.outputs.skip != 'true'
+        run: |
+          git switch -c "${{ steps.fetch.outputs.branch }}"
+          if git merge --no-edit upstream/main; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U > conflicts.txt
+            git merge --abort
+          fi
+
+      - name: Report a conflict
+        if: steps.merge.outputs.ok == 'false'
+        run: |
+          {
+            echo "Upstream dx.bi v${{ steps.fetch.outputs.version }} doesn't merge cleanly into \`$WORK\`."
+            echo
+            echo "Conflicting files:"
+            sed 's/^/- `/; s/$/`/' conflicts.txt
+            echo
+            echo "Merge it by hand: \`git fetch upstream && git switch $WORK && git merge upstream/main\`."
+          } > body.md
+          gh issue create --title "Upstream v${{ steps.fetch.outputs.version }}: merge conflict" --body-file body.md
+          exit 1
+
+      - uses: actions/setup-node@v4
+        if: steps.merge.outputs.ok == 'true'
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        if: steps.merge.outputs.ok == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Test
+        id: test
+        if: steps.merge.outputs.ok == 'true'
+        run: |
+          : > results.md
+          failed=0
+          check() {
+            name="$1"; shift
+            if "$@" > log.txt 2>&1; then
+              echo "- ✅ $name" >> results.md
+            else
+              failed=1
+              { echo "- ❌ $name"; echo; echo '  ```'; tail -n 25 log.txt | sed 's/^/  /'; echo '  ```'; } >> results.md
+            fi
+          }
+          for t in tools/metadata-language-test.mjs tools/viewer-merge-test.mjs tools/profile-sync/test.mjs \
+                   tools/party-roles-test.mjs tools/quick-play-test.mjs tools/engine-test.mjs tools/engine-contract-test.mjs; do
+            [ -f "$t" ] && check "node $t" node "$t"
+          done
+          check "Android debug build" bash -c "cd tv && ./gradlew --no-daemon assembleDebug"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          cat results.md
+
+      - name: Offer the pull request
+        if: steps.merge.outputs.ok == 'true'
+        run: |
+          branch="${{ steps.fetch.outputs.branch }}"
+          range="${{ steps.fetch.outputs.range }}"
+          if ! git push origin "$branch" 2> push.txt; then
+            cat push.txt
+            gh issue create --title "Upstream v${{ steps.fetch.outputs.version }}: sync by hand" \
+              --body "The merge was clean, but GitHub wouldn't let the workflow push it (usually because upstream changed a workflow file). Merge it by hand: \`git fetch upstream && git switch $WORK && git merge upstream/main\`."
+            exit 1
+          fi
+          {
+            if [ "${{ steps.test.outputs.failed }}" = "1" ]; then echo "**Some checks failed:** see below before merging."; else echo "All checks passed."; fi
+            echo
+            echo "## Checks"
+            cat results.md
+            echo
+            echo "## Upstream commits"
+            git log --no-merges --format='- %h %s' "$range" | head -n 50
+            echo
+            echo "## Upstream changes to what the mobile apps depend on"
+            git diff --stat "$range" -- dxbi.plugin.js dxbi.theme.css tv/ tools/ .github/ | tail -n 40 | sed 's/^/    /'
+          } > body.md
+          title="Upstream v${{ steps.fetch.outputs.version }}"
+          [ "${{ steps.test.outputs.failed }}" = "1" ] && title="$title (checks failing)"
+          gh pr create --base "$WORK" --head "$branch" --title "$title" --body-file body.md
