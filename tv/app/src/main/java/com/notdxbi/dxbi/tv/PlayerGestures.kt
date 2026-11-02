@@ -32,7 +32,7 @@ class PlayerGestures(
     private val activity: PlayerActivity,
     private val playerView: PlayerView,
     private val exo: ExoPlayer,
-    private val controls: PlayerControls,
+    private val controls: Controls,
     private val seek: (Int) -> Unit,
     private val flash: (String, Long) -> Unit,
 ) : View.OnTouchListener {
@@ -55,10 +55,6 @@ class PlayerGestures(
     private var pinch = 1f
 
     init {
-        activity.findViewById<View>(R.id.ctl_lock).apply {
-            visibility = View.VISIBLE
-            setOnClickListener { lock() }
-        }
         unlock.setOnClickListener {
             locked = false
             unlock.visibility = View.GONE
@@ -67,7 +63,8 @@ class PlayerGestures(
         }
     }
 
-    private fun lock() {
+    /** Ignores every touch until the unlock button (a tap brings it up) is pressed */
+    fun lock() {
         locked = true
         controls.hide()
         flash("Screen locked: tap, then the lock to unlock", 1800)

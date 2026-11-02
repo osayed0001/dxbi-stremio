@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +79,16 @@ fun SettingsScreen(stremio: Stremio, onBack: () -> Unit) {
             return@Column
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+            // the phone's own: where videos play
+            item(key = "playIn") {
+                val other by stremio.playInOtherApp.collectAsState()
+                Text("PLAYER", color = Dx.Accent, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = Gutter, top = 22.dp, bottom = 4.dp))
+                SettingRow(
+                    Setting("playIn", "select", "Play videos in", "dx.bi's player, or another app on this phone (VLC, mpv, MX Player…). The player's ⧉ button and each stream's ⋮ menu open another app any time.",
+                        "", listOf(false to "dx.bi's player", true to "Another app (ask which)"), other),
+                    onToggle = {}, onPick = { stremio.setPlayInOtherApp(it == true) }, onEdit = {},
+                )
+            }
             itemsIndexed(items, key = { _, s -> s.key }) { i, s ->
                 if (s.group.isNotEmpty() && s.group != items.getOrNull(i - 1)?.group) {
                     Text(s.group.uppercase(), color = Dx.Accent, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = Gutter, top = 22.dp, bottom = 4.dp))

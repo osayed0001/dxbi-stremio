@@ -7243,6 +7243,43 @@
       findStream,
       streamHints,
       prettyCode,
+      // dx.bi's phone app: the party as data for its own screen, and what that screen can do
+      phone: {
+        state() {
+          const host = party.active ? party.hostId() : null;
+          const s = party.state;
+          const media = s && s.media;
+          return {
+            active: !!party.active,
+            connecting: !!party.connecting,
+            connected: party.active && party.links.some((l) => l.up),
+            code: party.active ? prettyCode(party.code) : null,
+            name: store.get("name") || "",
+            lastCode: store.get("lastCode") ? prettyCode(store.get("lastCode")) : null,
+            isHost: !!host && host === party.me,
+            media: media ? { title: media.title || "", poster: media.poster || null, playing: !!(s && s.playing), here: local.videoId() === media.videoId } : null,
+            members: party.active ? party.members().map((m) => {
+              const st = m.status || {};
+              const watching = st.where === "player" && media && st.videoId === media.videoId;
+              return { name: m.name || "Friend", self: !!m.self, host: m.id === host, line: watching ? (st.synced ? "Watching · in sync" : "Joining…") : st.where === "player" ? "Watching something else" : "Browsing" };
+            }) : [],
+            chat: party.chat.slice(-50).map((m) => ({ name: m.name, text: m.text, mine: !!m.mine })),
+          };
+        },
+        async start(name) {
+          store.set("name", name);
+          await party.start(await ownedCode(), name, true);
+        },
+        async join(code, name) {
+          const clean = normaliseCode(code);
+          if (!clean) throw new Error("That isn't a party code");
+          store.set("name", name);
+          await party.start(clean, name, false);
+        },
+        rejoin: () => party.rejoin(),
+        leave: () => party.leave(false),
+        say: (text) => party.say(text),
+      },
       closePanel() {
         if (!ui.open) return false;
         ui.toggle(false);
@@ -15239,6 +15276,8 @@
         quickPlay.play(item);
         return item.st.deepLinks.player;
       },
+      // Watch party (see watchParty.phone)
+      party: watchParty.phone,
       // Who's watching? (choose one with viewers.select)
       viewers() {
         const v = viewers.list();

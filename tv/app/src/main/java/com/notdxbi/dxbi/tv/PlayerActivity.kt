@@ -66,7 +66,7 @@ import java.util.concurrent.TimeUnit
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var playerView: PlayerView
-    private lateinit var controls: PlayerControls
+    private lateinit var controls: Controls
     private var gestures: PlayerGestures? = null
     private var session: MediaSession? = null
     // a download playing from the phone (its id), rather than a stream the page handed over
@@ -294,13 +294,25 @@ class PlayerActivity : AppCompatActivity() {
         nextArt = next?.optString("thumbnail").orEmpty()
         upNextSeconds = if (next == null) 0 else stream.optString("upNext", "10").toIntOrNull() ?: 0
         upNextCard = findViewById(R.id.up_next)
-        controls = PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, { PlaybackBus.listener?.onPartyLeave() }) { go -> finishWith(next = go) }
+        val leaveParty = { PlaybackBus.listener?.onPartyLeave(); Unit }
+        // Phones: their own controls, laid out like a streaming app's, and worked by touch
+        controls = if (phone) PhoneControls(
+            this, playerView, exo, sound, zoom, ::shiftSubtitles, accent,
+            title = stream.optString("title"),
+            subtitle = stream.optString("subtitle"),
+            hasNext = next != null,
+            showClock = showClock,
+            seek = ::seek,
+            leaveParty = leaveParty,
+            leave = { go -> finishWith(next = go) },
+            onLock = { gestures?.lock() },
+            onExternal = { playElsewhere() },
+        ) else PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, leaveParty) { go -> finishWith(next = go) }
         PlaybackBus.player = this
         // Phones: taps, double taps, slides and pinches (the remote still works the same everywhere)
         if (phone) {
             val touch = PlayerGestures(this, playerView, exo, controls, ::seek, ::flash).also { gestures = it }
             playerView.setOnTouchListener(touch)
-            findViewById<View>(R.id.controls).setOnTouchListener(touch)
         }
         fitControls()
         findViewById<View>(R.id.up_next_play).setOnClickListener { finishWith(next = true) }
@@ -527,6 +539,28 @@ class PlayerActivity : AppCompatActivity() {
         handler.postDelayed(hideFlash, 900)
     }
 
+    // -----------------------------------------------------------------------------------------------
+    // Phones: carrying on in another app (VLC, mpv…) from where this one is
+
+    private val elsewhere = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        val r = ExternalPlayer.result(result.data)
+        // where the other app got to is where this video's progress stands
+        if (r.positionMs > 0) finishWith(ended = r.ended, positionMs = r.positionMs, durationMs = r.durationMs) else finishWith()
+    }
+
+    private fun playElsewhere() {
+        val exo = player ?: return
+        val stream = JSONObject(intent.getStringExtra(EXTRA_STREAM) ?: "{}")
+        if (offlineId != null) return flash("Downloads play here only", 1500)
+        val chooser = ExternalPlayer.chooser(stream, exo.currentPosition) ?: return
+        exo.pause()
+        try {
+            elsewhere.launch(chooser)
+        } catch (_: Exception) {
+            ExternalPlayer.noApp(this)
+        }
+    }
+
     /** A moment of feedback in the middle of the picture ("" hides it) */
     private fun flash(text: String, forMs: Long) {
         handler.removeCallbacks(hideFlash)
@@ -546,14 +580,15 @@ class PlayerActivity : AppCompatActivity() {
         else PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
     }
 
-    private fun finishWith(ended: Boolean = false, error: String? = null, next: Boolean = false) {
+    /** Closes the player and says how it went ([positionMs]/[durationMs]: where another app left it, instead of this one) */
+    private fun finishWith(ended: Boolean = false, error: String? = null, next: Boolean = false, positionMs: Long? = null, durationMs: Long? = null) {
         if (closed) return
         closed = true
         handler.removeCallbacksAndMessages(null)
         if (::controls.isInitialized) controls.release()
         val exo = player
-        val duration = exo?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
-        val position = if (ended) duration else exo?.currentPosition ?: 0L
+        val duration = durationMs?.takeIf { it > 0 } ?: exo?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
+        val position = if (ended) duration else positionMs ?: exo?.currentPosition ?: 0L
         // A download wasn't handed over by the page: its place is kept here instead
         val offline = offlineId
         if (offline != null) Downloads.leftAt(offline, position, ended)

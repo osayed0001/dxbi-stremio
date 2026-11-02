@@ -28,7 +28,7 @@ object Updates {
     private const val RELEASES_URL = "https://api.github.com/repos/$REPO/releases/latest"
     private const val LATEST_PAGE = "https://github.com/$REPO/releases/latest"
     // A debug build runs the plugin it was built with: a released one fetched over it would hide the work being tested
-    private val ENABLED = !BuildConfig.DEBUG
+    private val ENABLED = BuildConfig.SELF_UPDATE
     private const val RECHECK_MS = 6 * 60 * 60 * 1000L
     private const val APK_ASSET = "dxbi-tv.apk"
     private const val UPDATED_PLUGIN = "dxbi.plugin.js"

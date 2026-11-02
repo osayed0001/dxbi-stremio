@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -106,7 +109,8 @@ private const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
 @Composable
 fun PhoneApp(engine: Engine) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    // (Stremio's state is read and turned into screens' data off the main thread, so scrolling never waits for it)
+    val scope = rememberCoroutineScope { kotlinx.coroutines.Dispatchers.Default }
     val stremio = remember { Stremio(context.applicationContext, engine, scope) }
     DxTheme {
         val account by stremio.account.collectAsState()
@@ -167,8 +171,17 @@ private fun Screens(stremio: Stremio) {
                 nav,
                 startDestination = Tab.Home.route,
                 modifier = Modifier.fillMaxSize().haze(haze),
-                enterTransition = { fadeIn() },
-                exitTransition = { fadeOut() },
+                // tabs cross-fade; a title slides in over where it was opened from, and back out
+                enterTransition = {
+                    if (targetState.destination.route.orEmpty().startsWith("title/")) slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(260))
+                    else fadeIn(tween(200))
+                },
+                exitTransition = { fadeOut(tween(140)) },
+                popEnterTransition = { fadeIn(tween(200)) },
+                popExitTransition = {
+                    if (initialState.destination.route.orEmpty().startsWith("title/")) slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(220))
+                    else fadeOut(tween(140))
+                },
             ) {
                 composable(Tab.Home.route) {
                     HomeScreen(

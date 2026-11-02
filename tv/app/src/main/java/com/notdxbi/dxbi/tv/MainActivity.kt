@@ -83,8 +83,8 @@ class MainActivity : AppCompatActivity() {
         root.addView(web, webSize())
         setContentView(root)
         // Phones get native screens over the page, which keeps doing Stremio's work underneath (laid out
-        // and running, just covered). For now only debug builds, while the screens are being built.
-        if (BuildConfig.DEBUG && Bridge(this).isPhone()) {
+        // and running, just covered). For now debug and preview builds, while the screens are finished.
+        if (BuildConfig.PHONE_UI && Bridge(this).isPhone()) {
             val engine = Engine(::js).also { engine = it }
             // (where it draws nothing, touches reach the page: how the page shows through when it's needed)
             phoneUi = ComposeView(this).apply { setContent { PhoneApp(engine) } }

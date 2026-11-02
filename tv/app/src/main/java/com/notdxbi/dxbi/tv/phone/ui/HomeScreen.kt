@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
@@ -142,7 +143,9 @@ fun HomeScreen(
             }
         }
 
-        TopBar(scrolled, filter, onFilter = { filter = it }, onSearch = onSearch, onCategories = {
+        var party by rememberSaveable { mutableStateOf(false) }
+        if (party) PartySheet(stremio) { party = false }
+        TopBar(scrolled, filter, onFilter = { filter = it }, onSearch = onSearch, onParty = { party = true }, onCategories = {
             onCategories(if (filter == HomeFilter.Series) "series" else "movie")
         })
     }
@@ -161,6 +164,7 @@ private fun TopBar(
     filter: HomeFilter,
     onFilter: (HomeFilter) -> Unit,
     onSearch: () -> Unit,
+    onParty: () -> Unit,
     onCategories: () -> Unit,
 ) {
     val shade = if (scrolled) Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.97f)))
@@ -171,6 +175,7 @@ private fun TopBar(
                 if (filter == HomeFilter.All) Logo()
                 else Text(filter.label, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = 24.sp, modifier = Modifier.clickable { onFilter(HomeFilter.All) })
             }
+            IconButton(onClick = onParty) { Icon(Icons.Filled.Groups, contentDescription = "Watch party", tint = Dx.Text) }
             CastButton()
             IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, contentDescription = "Search", tint = Dx.Text) }
         }

@@ -33,6 +33,10 @@ android {
         versionName = dxbiVersion
         versionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
+        // Phones get dx.bi's own native screens (debug and preview builds, while they're being finished)
+        buildConfigField("boolean", "PHONE_UI", "false")
+        // Released builds keep themselves current; test builds run the plugin they were built with
+        buildConfigField("boolean", "SELF_UPDATE", "true")
     }
 
     buildFeatures {
@@ -58,6 +62,8 @@ android {
             // Installs next to the released app (a different key can't replace it) and keeps its own data
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
+            buildConfigField("boolean", "PHONE_UI", "true")
+            buildConfigField("boolean", "SELF_UPDATE", "false")
             // the emulator is x86
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
         }
@@ -68,6 +74,17 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (signingValue("storeFile", "DXBI_TV_KEYSTORE") != null) signingConfig = signingConfigs.getByName("release")
+        }
+        // A release build to test on a phone: as fast as a release (shrunk, optimised, not debuggable),
+        // signed with the debug key and installed beside the released app like a debug build
+        create("preview") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-preview"
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "PHONE_UI", "true")
+            buildConfigField("boolean", "SELF_UPDATE", "false")
         }
     }
 

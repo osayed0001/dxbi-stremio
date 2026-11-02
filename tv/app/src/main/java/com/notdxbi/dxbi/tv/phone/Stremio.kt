@@ -52,6 +52,11 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     val continueWatching: StateFlow<List<Continue>> = continueState.map { Continue.list(it).orEmpty() }.stateIn(scope, SharingStarted.Eagerly, Continue.list(continueState.value).orEmpty())
 
     // dx.bi's own Home pieces, asked for from the plugin and remembered the same way
+    private companion object {
+        /** Where the page waits, out of sight: a screen Stremio has nothing on */
+        const val PARKED = "#/dxbi"
+    }
+
     private fun saved(key: String) = cache.getString(key, null)?.let { runCatching { JSONArray(it) }.getOrNull() }
     val billboard = MutableStateFlow(saved("x.billboard").objects().map(Title::from))
     val myList = MutableStateFlow(saved("x.myList").objects().map { ListRow(it.optString("name"), it.optJSONArray("items").objects().map(Title::from)) })
@@ -88,6 +93,10 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
         scope.launch {
             engine.ready.collect { up ->
                 if (!up) return@collect
+                // The page itself waits on an empty screen: its own Home (billboard, rows, posters) would
+                // keep working away out of sight. First, so leaving its Home doesn't unload ours.
+                ask("go", JSONObject().put("hash", PARKED))
+                delay(400)
                 loadHome()
                 refreshExtras()
             }
@@ -191,7 +200,12 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
      * player, another app, on a Chromecast (where Play goes anyway while one is connected) or as a download
      */
     fun play(option: StreamOption, target: PlaybackBus.Target = PlaybackBus.Target.Player) = scope.launch {
-        PlaybackBus.nextTarget = if (target == PlaybackBus.Target.Player && !option.torrent && Cast.connected(app)) PlaybackBus.Target.Cast else target
+        PlaybackBus.nextTarget = when {
+            target != PlaybackBus.Target.Player -> target
+            !option.torrent && Cast.connected(app) -> PlaybackBus.Target.Cast
+            playInOtherApp.value -> PlaybackBus.Target.External
+            else -> target
+        }
         val link = dx("phone.play", option.index) as? String ?: option.play
         ask("play", JSONObject().put("link", link))
     }
@@ -260,6 +274,14 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
         ask("signOut")
     }
 
+    /** dx.bi settings → Play videos in: another app (VLC, mpv…) rather than dx.bi's player */
+    val playInOtherApp = MutableStateFlow(cache.getBoolean("playInOtherApp", false))
+
+    fun setPlayInOtherApp(on: Boolean) {
+        playInOtherApp.value = on
+        cache.edit().putBoolean("playInOtherApp", on).apply()
+    }
+
     /** Browsing without an account (Stremio allows it: no sync, no library on other devices) */
     val guest = MutableStateFlow(cache.getBoolean("guest", false))
 
@@ -325,6 +347,18 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     /** A title's scores and reviews (dx.bi's Reviews: MDBList, Wikidata, Wikipedia, TMDB with the keys set) */
     suspend fun reviews(type: String, id: String): Reviews? =
         (engine.runCatching { call("dx", JSONObject().put("method", "phone.reviews").put("args", JSONArray().put(type).put(id)), 40_000) }.getOrNull() as? JSONObject)?.let(Reviews::from)
+
+    // ---------------------------------------------------------------------------------------------
+    // Watch party (dx.bi's own: end-to-end encrypted, everyone streams from their own addons)
+
+    suspend fun party(): JSONObject? = dx("phone.party.state") as? JSONObject
+
+    /** Each returns null when it worked, else what went wrong */
+    suspend fun startParty(name: String): String? = attempt("dx", JSONObject().put("method", "phone.party.start").put("args", JSONArray().put(name))) {}
+    suspend fun joinParty(code: String, name: String): String? = attempt("dx", JSONObject().put("method", "phone.party.join").put("args", JSONArray().put(code).put(name))) {}
+    fun rejoinParty() = scope.launch { dx("phone.party.rejoin") }
+    fun leaveParty() = scope.launch { dx("phone.party.leave") }
+    fun sayInParty(text: String) = scope.launch { dx("phone.party.say", text) }
 
     /** dx.bi settings, as the TV lists them */
     suspend fun settings(): List<Setting> = (ask("settings") as? JSONArray).objects().map(Setting::from)
