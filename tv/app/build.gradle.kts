@@ -103,6 +103,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
+    // Phones: lock screen, headphone and picture-in-picture controls
+    implementation("androidx.media3:media3-session:1.5.1")
     // Sound the device can't decode itself: most phones have no Dolby or DTS decoder, so those films
     // played silently. Jellyfin's build of Media3's FFmpeg extension; the hardware still goes first
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")

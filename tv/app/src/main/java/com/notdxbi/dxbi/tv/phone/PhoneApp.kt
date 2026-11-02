@@ -177,8 +177,8 @@ private fun Screens(stremio: Stremio) {
                         onPlay = { nav.openTitle(it, play = true) },
                         onResume = { nav.openTitle(it.title, play = true) },
                         onSearch = { nav.switchTo(Tab.Search, "search?focus=true") },
-                        onSeeAll = { link -> nav.navigate("discover?link=${Uri.encode(link)}") },
-                        onCategories = { type -> nav.navigate("discover?type=$type") },
+                        onSeeAll = { link -> nav.navigate("browse?link=${Uri.encode(link)}") },
+                        onCategories = { type -> nav.navigate("browse?type=$type") },
                     )
                 }
                 composable(Tab.Discover.route) {
@@ -224,8 +224,9 @@ private fun Screens(stremio: Stremio) {
                         onSearch = { name -> nav.navigate("search?q=${Uri.encode(name)}") },
                     )
                 }
+                // (not "discover?…": that would also match the Discover tab's own "discover")
                 composable(
-                    "discover?link={link}&type={type}",
+                    "browse?link={link}&type={type}",
                     arguments = listOf(navArgument("link") { defaultValue = "" }, navArgument("type") { defaultValue = "" }),
                 ) { e ->
                     val link = e.arguments?.getString("link").orEmpty()

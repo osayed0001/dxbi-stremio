@@ -39,6 +39,17 @@
             android:contentDescription="Back"
             android:src="@drawable/ic_back" />
 
+        <!-- Phones: locks the screen against touches (shown by PlayerGestures) -->
+        <ImageButton
+            android:id="@+id/ctl_lock"
+            style="@style/PlayerButton"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="104dp"
+            android:layout_marginTop="28dp"
+            android:contentDescription="Lock the screen"
+            android:src="@drawable/ic_lock"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/controls_bottom"
             android:layout_width="match_parent"
@@ -346,5 +357,16 @@
         android:textColor="@android:color/white"
         android:textSize="20sp"
         android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- While the screen is locked: the one thing a tap brings up -->
+    <ImageButton
+        android:id="@+id/unlock"
+        style="@style/PlayerButton"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="104dp"
+        android:layout_marginTop="28dp"
+        android:contentDescription="Unlock the screen"
+        android:src="@drawable/ic_unlock"
         android:visibility="gone" />
 </FrameLayout>
