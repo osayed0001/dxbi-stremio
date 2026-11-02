@@ -25,6 +25,8 @@ import kotlin.math.roundToInt
  *  - sliding sideways seeks, with where it'll land shown until the finger lifts
  *  - sliding up or down: brightness on the left, volume on the right
  *  - pinching zooms the picture to fill the screen, or back to all of it
+ *  - holding plays at 2x; still holding, sliding right goes up to 4x and left down to 1.25x, a quarter
+ *    at a time; letting go goes back to the speed it was
  *  - the lock button ignores every touch until it's unlocked
  */
 @OptIn(UnstableApi::class)
@@ -53,6 +55,12 @@ class PlayerGestures(
     private var startBrightness = 0.5f
     private var startVolume = 0
     private var pinch = 1f
+    // holding for speed: the speed before, where the finger went down, the speed now
+    private var holding = false
+    private var holdFrom = 1f
+    private var holdX = 0f
+    private var holdSpeed = 2f
+    private val step = 36 * activity.resources.displayMetrics.density
 
     init {
         unlock.setOnClickListener {
@@ -76,6 +84,18 @@ class PlayerGestures(
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             if (controls.visible) controls.hide() else controls.show()
             return true
+        }
+
+        override fun onLongPress(e: MotionEvent) {
+            if (drag != Drag.None || pinches.isInProgress) return
+            holding = true
+            holdFrom = exo.playbackParameters.speed
+            holdX = e.x
+            holdSpeed = 2f
+            controls.hide()
+            exo.setPlaybackSpeed(holdSpeed)
+            playerView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            flash(speedText(holdSpeed), 60_000)
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -167,6 +187,28 @@ class PlayerGestures(
             }
             return true
         }
+        if (holding) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    val steps = ((event.x - holdX) / step).roundToInt()
+                    val speed = (2f + steps * 0.25f).coerceIn(1.25f, 4f)
+                    if (speed != holdSpeed) {
+                        holdSpeed = speed
+                        exo.setPlaybackSpeed(speed)
+                        playerView.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                        flash(speedText(speed), 60_000)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    holding = false
+                    exo.setPlaybackSpeed(holdFrom)
+                    flash("", 0)
+                }
+            }
+            // (the tap detector still needs to know the finger lifted)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) taps.onTouchEvent(event)
+            return true
+        }
         pinches.onTouchEvent(event)
         if (!pinches.isInProgress && event.pointerCount == 1) taps.onTouchEvent(event)
         if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
@@ -188,6 +230,9 @@ class PlayerGestures(
     } catch (_: Exception) {
         0.5f
     }
+
+    /** "2x ▶▶", and how to change it while holding */
+    private fun speedText(speed: Float) = "${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x  ▶▶   ‹ slide ›"
 
     fun release() = handler.removeCallbacksAndMessages(null)
 

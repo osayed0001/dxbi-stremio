@@ -206,8 +206,17 @@ class PhoneControls(
                 // tapping beside the menu closes it
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).pointerInput(Unit) { detectTapGestures { closePanel() } })
             }
+            // Speed is one row: a small card just above the buttons
             AnimatedVisibility(
-                open != null,
+                open == Panel.Speed,
+                modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = if (sideways) 64.dp else 86.dp),
+                enter = slideInVertically { it / 3 } + fadeIn(),
+                exit = slideOutVertically { it / 3 } + fadeOut(),
+            ) {
+                Box(Modifier.padding(horizontal = 12.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xF2141414)).pointerInput(Unit) { detectTapGestures { } }) { Speed() }
+            }
+            AnimatedVisibility(
+                open != null && open != Panel.Speed,
                 modifier = Modifier.align(if (sideways) Alignment.CenterEnd else Alignment.BottomCenter),
                 enter = if (sideways) slideInHorizontally { it } + fadeIn() else slideInVertically { it } + fadeIn(),
                 exit = if (sideways) slideOutHorizontally { it } + fadeOut() else slideOutVertically { it } + fadeOut(),
@@ -220,9 +229,8 @@ class PhoneControls(
                 ) {
                     when (open) {
                         Panel.Tracks -> Tracks(sideways)
-                        Panel.Speed -> Speed()
                         Panel.More -> More()
-                        null -> {}
+                        Panel.Speed, null -> {}
                     }
                 }
             }
@@ -231,6 +239,7 @@ class PhoneControls(
 
     @Composable
     private fun TopBar(modifier: Modifier, sideways: Boolean) {
+        @Suppress("UNUSED_EXPRESSION") now // (read here, so this part redraws with the player)
         Row(modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(Icons.AutoMirrored.Filled.ArrowBack, "Back") { leave(false) }
             Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
@@ -246,13 +255,14 @@ class PhoneControls(
 
     @Composable
     private fun Center(modifier: Modifier, big: Boolean) {
+        @Suppress("UNUSED_EXPRESSION") now // (read here, so this part redraws with the player)
         val gap = if (big) 56.dp else 36.dp
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             Button(Icons.Filled.Replay10, "Back 10 seconds", size = 52.dp) { seek(-1); poke() }
             Spacer(Modifier.width(gap))
             Box(
                 Modifier.size(76.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.35f))
-                    .clickable { exo.playWhenReady = !exo.playWhenReady; poke() },
+                    .clickable { exo.playWhenReady = !exo.playWhenReady; now = System.currentTimeMillis(); poke() },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(if (exo.playWhenReady) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = if (exo.playWhenReady) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(54.dp))
@@ -264,6 +274,7 @@ class PhoneControls(
 
     @Composable
     private fun Bottom(modifier: Modifier, sideways: Boolean) {
+        @Suppress("UNUSED_EXPRESSION") now // (read here, so this part redraws with the player)
         Column(modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 6.dp)) {
             if (showClock && !sideways) Text(endsAt(), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.align(Alignment.End))
             SeekBar()
@@ -282,6 +293,7 @@ class PhoneControls(
     /** The seek bar: tap or drag; while dragging, where it'll land is shown above the finger */
     @Composable
     private fun SeekBar() {
+        @Suppress("UNUSED_EXPRESSION") now // (read here, so this part redraws with the player)
         val duration = exo.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
         var dragging by remember { mutableStateOf<Float?>(null) }
         val played = dragging ?: if (duration > 0) exo.currentPosition.toFloat() / duration else 0f
@@ -388,11 +400,11 @@ class PhoneControls(
     @Composable
     private fun Speed() {
         @Suppress("UNUSED_EXPRESSION") now
-        Column(Modifier.padding(12.dp)) {
-            Heading("Playback speed")
+        Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 12.dp)) {
+            Heading("Playback speed · hold the video to speed up")
             LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)) { s ->
-                    Pill(if (s == 1f) "1x (Normal)" else "${s}x", on = exo.playbackParameters.speed == s) { exo.setPlaybackSpeed(s) }
+                items(listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)) { s ->
+                    Pill(if (s == 1f) "1x" else "${s}x", on = exo.playbackParameters.speed == s) { exo.setPlaybackSpeed(s); now = System.currentTimeMillis() }
                 }
             }
         }
