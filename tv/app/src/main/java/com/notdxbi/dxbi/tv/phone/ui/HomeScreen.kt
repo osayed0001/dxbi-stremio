@@ -278,12 +278,12 @@ private fun Billboard(slides: List<Title>, onOpen: (Title) -> Unit, onPlay: (Tit
 
 /** A title's logo, or its name set large when it has none or it won't load ([textSize] 0: nothing instead) */
 @Composable
-fun TitleArt(t: Title, modifier: Modifier, textSize: Int = 30) {
+fun TitleArt(t: Title, modifier: Modifier, textSize: Int = 30, start: Boolean = false) {
     var failed by remember(t.logo) { mutableStateOf(t.logo == null) }
     if (!failed) {
-        AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = modifier)
+        AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, alignment = if (start) Alignment.CenterStart else Alignment.Center, onError = { failed = true }, modifier = modifier)
     } else if (textSize > 0) {
-        Text(t.name, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = textSize.sp, lineHeight = (textSize + 4).sp, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Text(t.name, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = textSize.sp, lineHeight = (textSize + 4).sp, textAlign = if (start) TextAlign.Start else TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
 }
 

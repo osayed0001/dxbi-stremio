@@ -30,11 +30,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="fullUser">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
+            <!-- (its launcher entry is in tv/ and mobile/: a TV's launcher, or a phone's) -->
             <!-- stremio:// addon links -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

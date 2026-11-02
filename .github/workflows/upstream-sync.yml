@@ -125,7 +125,7 @@ jobs:
                    tools/party-roles-test.mjs tools/quick-play-test.mjs tools/engine-test.mjs tools/engine-contract-test.mjs; do
             [ -f "$t" ] && check "node $t" node "$t"
           done
-          check "Android debug build" bash -c "cd tv && ./gradlew --no-daemon assembleDebug"
+          check "Android debug builds (TV and phone)" bash -c "cd tv && ./gradlew --no-daemon assembleTvDebug assembleMobileDebug"
           echo "failed=$failed" >> "$GITHUB_OUTPUT"
           cat results.md
 

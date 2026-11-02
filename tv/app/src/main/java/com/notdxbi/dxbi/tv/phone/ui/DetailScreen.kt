@@ -186,7 +186,10 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
             Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 7f else 16f / 10f)) {
                 AsyncImage(model = title.backdrop, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.55f), 0.3f to Color.Transparent, 0.65f to Color.Transparent, 1f to Dx.Background)))
-                TitleArt(title, Modifier.align(Alignment.BottomStart).padding(start = Gutter, bottom = 8.dp).fillMaxWidth(0.55f).heightIn(max = 70.dp), textSize = 0)
+                // the title's logo names it, as on the desktop (its name in large type when it has none)
+                Box(Modifier.align(Alignment.BottomStart).padding(start = Gutter, end = Gutter, bottom = 8.dp).fillMaxWidth(0.62f)) {
+                    TitleArt(title, Modifier.fillMaxWidth().heightIn(max = 92.dp), textSize = 28, start = true)
+                }
             }
         }
         item { Header(title, details, onPlay = { start(details?.let { nextVideo(it)?.id }) }) }
@@ -308,7 +311,6 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
 @Composable
 private fun Header(t: Title, d: Details?, onPlay: () -> Unit) {
     Column(Modifier.padding(horizontal = Gutter)) {
-        if (t.name.isNotEmpty()) Text(t.name, style = MaterialTheme.typography.headlineMedium, color = Dx.Text)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             val bits = listOfNotNull(t.year, t.runtime?.let(::shortRuntime))

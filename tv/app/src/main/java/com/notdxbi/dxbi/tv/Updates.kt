@@ -30,7 +30,8 @@ object Updates {
     // A debug build runs the plugin it was built with: a released one fetched over it would hide the work being tested
     private val ENABLED = BuildConfig.SELF_UPDATE
     private const val RECHECK_MS = 6 * 60 * 60 * 1000L
-    private const val APK_ASSET = "dxbi-tv.apk"
+    // each app updates to its own: dxbi-tv.apk or dxbi-mobile.apk
+    private const val APK_ASSET = BuildConfig.APK_NAME
     private const val UPDATED_PLUGIN = "dxbi.plugin.js"
 
     private val http by lazy {
@@ -183,7 +184,7 @@ object Updates {
                     if (activity.isFinishing) return@runOnUiThread
                     AlertDialog.Builder(activity)
                         .setTitle("The update didn't download")
-                        .setMessage("${e.message}\n\nTry again later, or install it with the Downloader app from:\ngithub.com/$REPO/releases/latest/download/dxbi-tv.apk")
+                        .setMessage("${e.message}\n\nTry again later, or install it with the Downloader app from:\ngithub.com/$REPO/releases/latest/download/$APK_ASSET")
                         .setPositiveButton("OK", null)
                         .show()
                 }

@@ -33,10 +33,26 @@ android {
         versionName = dxbiVersion
         versionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
-        // Phones get dx.bi's own native screens (debug and preview builds, while they're being finished)
-        buildConfigField("boolean", "PHONE_UI", "false")
         // Released builds keep themselves current; test builds run the plugin they were built with
         buildConfigField("boolean", "SELF_UPDATE", "true")
+    }
+
+    // Two apps from this code, each released and updated on its own:
+    //  - tv: dx.bi TV for Android TV, Google TV and Fire TV (Stremio's page, worked by remote)
+    //  - mobile: dx.bi for Android phones and tablets (native screens over Stremio's page)
+    flavorDimensions += "device"
+    productFlavors {
+        create("tv") {
+            dimension = "device"
+            buildConfigField("boolean", "PHONE_UI", "false")
+            buildConfigField("String", "APK_NAME", "\"dxbi-tv.apk\"")
+        }
+        create("mobile") {
+            dimension = "device"
+            applicationId = "com.notdxbi.dxbi.mobile"
+            buildConfigField("boolean", "PHONE_UI", "true")
+            buildConfigField("String", "APK_NAME", "\"dxbi-mobile.apk\"")
+        }
     }
 
     buildFeatures {
@@ -62,7 +78,6 @@ android {
             // Installs next to the released app (a different key can't replace it) and keeps its own data
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            buildConfigField("boolean", "PHONE_UI", "true")
             buildConfigField("boolean", "SELF_UPDATE", "false")
             // the emulator is x86
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
@@ -83,7 +98,6 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-preview"
             matchingFallbacks += "release"
-            buildConfigField("boolean", "PHONE_UI", "true")
             buildConfigField("boolean", "SELF_UPDATE", "false")
         }
     }
