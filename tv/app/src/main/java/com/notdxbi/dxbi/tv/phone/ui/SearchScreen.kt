@@ -110,7 +110,7 @@ fun SearchScreen(stremio: Stremio, initial: String, focus: Boolean, onOpen: (Tit
         if (query.trim().length < 2) {
             // Nothing typed yet: what's popular, as a list to start from
             val suggestions = (billboard + rows.filter { it.type == "movie" || it.type == "series" }.flatMap { it.items }).distinctBy { it.id }.take(30)
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current)) {
                 item { Text("Recommended", style = MaterialTheme.typography.titleMedium, color = Dx.Text, modifier = Modifier.padding(Gutter, 8.dp)) }
                 items(suggestions, key = { it.id }) { t -> Suggestion(t, onOpen = { onOpen(t) }, onPlay = { onPlay(t) }) }
             }
@@ -152,7 +152,7 @@ fun PosterGrid(items: List<Title>, loading: Boolean, header: String? = null, onE
     LazyVerticalGrid(
         state = grid,
         columns = GridCells.Adaptive(104.dp),
-        contentPadding = PaddingValues(Gutter, 4.dp, Gutter, 24.dp),
+        contentPadding = PaddingValues(Gutter, 4.dp, Gutter, 24.dp + LocalBarSpace.current),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

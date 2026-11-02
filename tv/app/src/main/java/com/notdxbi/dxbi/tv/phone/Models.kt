@@ -227,6 +227,53 @@ data class Airing(
     }
 }
 
+data class Addon(
+    val transportUrl: String, val id: String, val name: String, val version: String, val description: String, val logo: String?,
+    val types: List<String>, val official: Boolean, val protected: Boolean, val configurable: Boolean, val configurationRequired: Boolean, val installed: Boolean,
+) {
+    /** Where the addon lets you set it up (its own web page) */
+    val configureUrl: String get() = transportUrl.replace(Regex("""manifest\.json$"""), "configure")
+
+    companion object {
+        fun from(o: JSONObject) = Addon(
+            o.optString("transportUrl"), o.optString("id"), o.optString("name"), o.optString("version"), o.optString("description"), o.text("logo"),
+            o.optJSONArray("types").strings(), o.optBoolean("official"), o.optBoolean("protected"), o.optBoolean("configurable"),
+            o.optBoolean("configurationRequired"), o.optBoolean("installed"),
+        )
+    }
+}
+
+data class Score(val source: String, val name: String, val note: String, val value: String, val votes: Int, val url: String?)
+data class Review(val author: String, val rating: Double?, val date: String, val text: String, val url: String?)
+
+data class Reviews(
+    val scores: List<Score>, val scoresFrom: String?, val problem: String?,
+    val critics: List<String>, val criticsUrl: String?,
+    val audience: List<Review>, val audienceTotal: Int, val audienceUrl: String?, val audienceProblem: String?,
+    val missing: List<String>,
+) {
+    companion object {
+        fun from(o: JSONObject): Reviews {
+            val critics = o.optJSONObject("critics")
+            val audience = o.optJSONObject("audience")
+            return Reviews(
+                scores = o.optJSONArray("scores").objects().map { Score(it.optString("source"), it.optString("name"), it.optString("note"), it.optString("value"), it.optInt("votes"), it.text("url")) },
+                scoresFrom = o.text("scoresFrom"),
+                problem = o.text("mdbError"),
+                critics = critics?.optJSONArray("text").strings(),
+                criticsUrl = critics?.text("url"),
+                audience = audience?.optJSONArray("reviews").objects().map {
+                    Review(it.optString("author"), if (it.isNull("rating")) null else it.optDouble("rating"), it.optString("when"), it.optString("text"), it.text("url"))
+                },
+                audienceTotal = audience?.optInt("total") ?: 0,
+                audienceUrl = audience?.text("url"),
+                audienceProblem = audience?.text("error"),
+                missing = o.optJSONArray("missing").strings(),
+            )
+        }
+    }
+}
+
 data class Setting(val key: String, val type: String, val label: String, val description: String, val group: String, val options: List<Pair<Any?, String>>, val value: Any?) {
     companion object {
         fun from(o: JSONObject) = Setting(

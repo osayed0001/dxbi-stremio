@@ -185,3 +185,27 @@ assert.equal((await ask(28, "go", { hash: "javascript:alert(1)" })).ok, false, "
 assert.equal((await ask(29, "go", { hash: "#/settings" })).ok, true);
 assert.equal(window.location.hash, "#/settings");
 console.log("PASS dx.bi's features and the page's own screens");
+
+// Addons: installed from Stremio's lists or a link, uninstalled (never the ones Stremio needs); Stremio's settings
+const cinemeta = { manifest: { id: "c", name: "Cinemeta", behaviorHints: { configurable: false } }, transportUrl: "https://c/manifest.json", flags: { official: true, protected: true }, installed: true };
+const extra = { manifest: { id: "x", name: "Extra", logo: "x.png", types: ["movie"], behaviorHints: { configurable: true } }, transportUrl: "https://x/manifest.json", flags: { official: false, protected: false }, installed: false };
+states.installed_addons = { catalog: [cinemeta] };
+states.remote_addons = { selectable: { catalogs: [{ name: "Official", selected: true, deepLinks: { addons: "#/addons/all/b/official" } }] }, catalog: { content: { type: "Ready", content: [cinemeta, extra] } } };
+const remoteView = (await ask(30, "get", { field: "remote_addons" })).data;
+assert.deepEqual(remoteView.catalogs, [{ name: "Official", selected: true, id: "official" }]);
+assert.deepEqual([remoteView.items[1].name, remoteView.items[1].configurable, remoteView.items[1].installed, remoteView.items[0].protected], ["Extra", true, false, true]);
+await ask(31, "addonInstall", { transportUrl: "https://x/manifest.json" });
+assert.deepEqual(dispatched.at(-1).action.args, { action: "InstallAddon", args: { manifest: extra.manifest, transportUrl: extra.transportUrl, flags: extra.flags } });
+states.ctx.profile.addons = [cinemeta, extra];
+await ask(32, "addonUninstall", { transportUrl: "https://x/manifest.json" });
+assert.equal(dispatched.at(-1).action.args.action, "UninstallAddon");
+assert.match((await ask(33, "addonUninstall", { transportUrl: "https://c/manifest.json" })).error, /Stremio needs/);
+states.addon_details = { remoteAddon: { content: { type: "Ready", content: extra } } };
+const fromLink = await ask(34, "addonFromUrl", { url: "stremio://x/manifest.json" });
+assert.equal(fromLink.data, "Extra");
+assert.equal(dispatched.find((d) => d.field === "addon_details").action.args.args.transportUrl, "https://x/manifest.json", "stremio:// links fetched over https");
+assert.equal((await ask(35, "addonFromUrl", { url: "not a link" })).ok, false);
+states.ctx.profile.settings = { audioLanguage: "eng", subtitlesSize: 100 };
+await ask(36, "updateSettings", { changes: { subtitlesSize: 150 } });
+assert.deepEqual(dispatched.at(-1).action.args, { action: "UpdateSettings", args: { audioLanguage: "eng", subtitlesSize: 150 } }, "the rest of the settings kept");
+console.log("PASS addons and Stremio's settings");

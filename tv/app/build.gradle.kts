@@ -122,6 +122,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+    // The frosted tab bar: what's behind it, blurred (Android 12 and later; a tint before that)
+    implementation("dev.chrisbanes.haze:haze:1.1.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")

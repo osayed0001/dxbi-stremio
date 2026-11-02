@@ -46,13 +46,20 @@ import com.notdxbi.dxbi.tv.phone.Setting
 import com.notdxbi.dxbi.tv.phone.Stremio
 import kotlinx.coroutines.launch
 
+/** Settings for how Stremio's page looks (TV and computer), which the phone's own screens don't use */
+private val WEB_ONLY = setOf(
+    "liteMode", "builtInTheme", "previews", "ratings", "animeTitles", "wideContinue", "librarySort", "trailers",
+    "whoIsWatching", "addonTools", "posterAccent", "crispPosters", "streamTools", "streamRows", "splash", "introSound",
+    "profileSync", "uiSounds", "focusColour", "videoRowsOnly", "newEpisodes", "accent",
+)
+
 /** dx.bi settings: the same list the TV shows, as a phone settings screen */
 @Composable
 fun SettingsScreen(stremio: Stremio, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var list by remember { mutableStateOf<List<Setting>?>(null) }
     var editing by remember { mutableStateOf<Setting?>(null) }
-    LaunchedEffect(Unit) { list = stremio.settings() }
+    LaunchedEffect(Unit) { list = stremio.settings().filter { it.key !in WEB_ONLY } }
 
     fun save(s: Setting, value: Any?) {
         // shown at once, saved behind

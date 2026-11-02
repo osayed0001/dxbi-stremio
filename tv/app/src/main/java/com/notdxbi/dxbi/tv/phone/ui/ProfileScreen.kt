@@ -26,18 +26,18 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,7 +95,7 @@ fun NewHotScreen(stremio: Stremio, onOpen: (Title) -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current)) {
             when (tab) {
                 0 -> if (airing.isEmpty()) item {
                     Text("Nothing from your shows this week. Add series to My List and their new episodes show up here.", color = Dx.Muted, modifier = Modifier.padding(Gutter))
@@ -148,39 +148,43 @@ private fun TopTen(rank: Int, t: Title, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// My dx.bi: the viewer, their lists, and the way to everything else
+// Profile: the account, its lists, and settings
 
 @Composable
-fun MyScreen(stremio: Stremio, onOpen: (Title) -> Unit, onProfiles: () -> Unit, onSettings: () -> Unit, onPage: (hash: String, dxMethod: String?) -> Unit) {
+fun ProfileScreen(
+    stremio: Stremio,
+    onOpen: (Title) -> Unit,
+    onLibrary: () -> Unit,
+    onCustomiseHome: () -> Unit,
+    onSettings: () -> Unit,
+    onStremioSettings: () -> Unit,
+) {
     val account by stremio.account.collectAsState()
-    val viewer by stremio.viewer.collectAsState()
-    val viewers by stremio.viewers.collectAsState()
     val myList by stremio.myList.collectAsState()
     val continueWatching by stremio.continueWatching.collectAsState()
-    LazyColumn(Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing),
+        contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current),
+    ) {
         item {
-            Column(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                ViewerBadge(viewer?.name ?: "Me", viewer?.colour, 72.dp)
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.clip(RoundedCornerShape(6.dp)).clickable(enabled = viewers.size > 1, onClick = onProfiles).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(viewer?.name ?: "Me", style = MaterialTheme.typography.titleLarge, color = Dx.Text)
-                    if (viewers.size > 1) Icon(Icons.Filled.SwapHoriz, contentDescription = "Switch profile", tint = Dx.Muted, modifier = Modifier.padding(start = 6.dp))
+            Column(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(76.dp).clip(CircleShape).background(Dx.Raised), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = Dx.Muted, modifier = Modifier.size(46.dp))
                 }
-                account?.email?.let { Text(it, color = Dx.Faint, style = MaterialTheme.typography.bodySmall) }
+                Spacer(Modifier.height(12.dp))
+                Text(account?.email ?: "Signed in", style = MaterialTheme.typography.titleMedium, color = Dx.Text)
             }
         }
         if (continueWatching.isNotEmpty()) item {
             PosterRow("Continue Watching", continueWatching.map { it.title }, onOpen = onOpen)
         }
-        myList.forEach { row -> item(key = "my:${row.name}") { PosterRow(row.name, row.items, onMore = { onPage("#/library", null) }, onOpen = onOpen) } }
+        item { PosterRow(myList.firstOrNull()?.name ?: "My List", myList.flatMap { it.items }, onMore = onLibrary, onOpen = onOpen) }
         item {
             Column(Modifier.padding(top = 6.dp)) {
-                Line(Icons.Filled.Tune, "Customise Home", "Order, hide and rename Home's rows") { onPage("#/", "homeLayout.open") }
-                Line(Icons.Filled.Settings, "dx.bi settings", "Billboard, rows, previews, sounds and more", onClick = onSettings)
-                Line(Icons.Filled.Extension, "Addons", account?.addons?.size?.let { "$it installed" }) { onPage("#/addons", null) }
-                Line(Icons.Filled.Notifications, "Stremio settings", "Player, subtitles, streaming server") { onPage("#/settings", null) }
-                Line(Icons.Filled.Web, "Classic view", "dx.bi as it looks on a computer") { onPage("#/", null) }
-                if (viewers.size > 1) Line(Icons.Filled.SwapHoriz, "Switch profile", null, onClick = onProfiles)
+                Line(Icons.Filled.VideoLibrary, "Library", "Everything you've added or watched", onClick = onLibrary)
+                Line(Icons.Filled.Tune, "Customise Home", "Order and hide Home's rows", onClick = onCustomiseHome)
+                Line(Icons.Filled.Settings, "dx.bi settings", "Rows, reviews, skipping, watch party and more", onClick = onSettings)
+                Line(Icons.Filled.Subtitles, "Playback & subtitles", "Languages, subtitles, next episode, streaming server", onClick = onStremioSettings)
                 Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", account?.email) { stremio.signOut() }
             }
         }
@@ -188,7 +192,7 @@ fun MyScreen(stremio: Stremio, onOpen: (Title) -> Unit, onProfiles: () -> Unit, 
 }
 
 @Composable
-private fun Line(icon: ImageVector, title: String, note: String?, onClick: () -> Unit) {
+fun Line(icon: ImageVector, title: String, note: String?, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Gutter, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = Dx.Muted)
         Spacer(Modifier.width(16.dp))
@@ -197,38 +201,6 @@ private fun Line(icon: ImageVector, title: String, note: String?, onClick: () ->
             note?.let { Text(it, color = Dx.Faint, style = MaterialTheme.typography.bodySmall) }
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Dx.Faint)
-    }
-}
-
-// ---------------------------------------------------------------------------------------------------
-// Who's watching?
-
-@Composable
-fun ProfilesScreen(stremio: Stremio, onDone: () -> Unit) {
-    val viewers by stremio.viewers.collectAsState()
-    val current by stremio.viewer.collectAsState()
-    Column(
-        Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing).padding(Gutter),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text("Who's watching?", style = MaterialTheme.typography.headlineMedium, color = Dx.Text)
-        Spacer(Modifier.height(32.dp))
-        viewers.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(28.dp), modifier = Modifier.padding(bottom = 24.dp)) {
-                pair.forEach { v ->
-                    Column(
-                        Modifier.clip(RoundedCornerShape(8.dp)).clickable { stremio.chooseViewer(v.id); onDone() }.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        ViewerBadge(v.name, v.colour, 104.dp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(v.name + if (v.kids) " · Kids" else "", color = if (v.id == current?.id) Dx.Text else Dx.Muted, style = MaterialTheme.typography.titleSmall)
-                    }
-                }
-            }
-        }
-        TextButton(onClick = onDone) { Text("Cancel", color = Dx.Muted) }
     }
 }
 
@@ -251,7 +223,7 @@ fun SignInScreen(stremio: Stremio) {
         Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("DX.BI", color = Dx.Accent, fontWeight = FontWeight.Black, fontSize = 40.sp)
+        Logo(52.sp)
         Spacer(Modifier.height(28.dp))
         Text("Sign in", style = MaterialTheme.typography.headlineMedium, color = Dx.Text)
         Text("With your Stremio account: your addons, library and progress come with it.", color = Dx.Muted, style = MaterialTheme.typography.bodyMedium)

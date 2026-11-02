@@ -61,6 +61,20 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     val rows: StateFlow<List<Row>> = combine(boardState, layout) { board, layout -> layout.arrange(Row.list(board).orEmpty()) }
         .stateIn(scope, SharingStarted.Eagerly, layout.value.arrange(Row.list(boardState.value).orEmpty()))
 
+    /** Every catalog Home could show, before the viewer's order and hiding (for Customise Home) */
+    val allRows: StateFlow<List<Row>> = boardState.map { Row.list(it).orEmpty() }.stateIn(scope, SharingStarted.Eagerly, Row.list(boardState.value).orEmpty())
+
+    /** Stremio's own settings (ctx.profile.settings): languages, subtitles, streaming server… */
+    val profileSettings: StateFlow<JSONObject> = ctxState.map { it?.optJSONObject("settings") ?: JSONObject() }
+        .stateIn(scope, SharingStarted.Eagerly, ctxState.value?.optJSONObject("settings") ?: JSONObject())
+
+    val installedAddons: StateFlow<List<Addon>> = engine.state("installed_addons").map { it?.optJSONArray("items").objects().map(Addon::from) }
+        .map { it.orEmpty() }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    val remoteAddons: StateFlow<JSONObject?> = engine.state("remote_addons")
+    val library: StateFlow<List<Title>> = engine.state("library").map { it?.optJSONArray("items").objects().map(Title::from) }
+        .map { it.orEmpty() }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    val streamingServer: StateFlow<JSONObject?> = engine.state("streaming_server")
+
     val details: StateFlow<Details?> = engine.state("meta_details").map(Details::from).stateIn(scope, SharingStarted.Eagerly, null)
     val search: StateFlow<List<Row>> = engine.state("search").map { Row.list(it).orEmpty() }.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val discover: StateFlow<Discover?> = engine.state("discover").map(Discover::from).stateIn(scope, SharingStarted.Eagerly, null)
@@ -225,21 +239,70 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
 
     fun signOut() = scope.launch { ask("signOut") }
 
+    // ---------------------------------------------------------------------------------------------
+    // Addons
+
+    fun loadAddons() = scope.launch {
+        ask("load", JSONObject().put("field", "installed_addons").put("model", "InstalledAddonsWithFilters").put("args", JSONObject().put("request", JSONObject().put("type", JSONObject.NULL))))
+    }
+
+    /** Stremio's addon lists: "official" or "community" */
+    fun loadRemoteAddons(catalog: String) = scope.launch {
+        val request = JSONObject().put("base", "https://v3-cinemeta.strem.io/manifest.json")
+            .put("path", JSONObject().put("resource", "addon_catalog").put("type", "all").put("id", catalog).put("extra", JSONArray()))
+        ask("load", JSONObject().put("field", "remote_addons").put("model", "CatalogWithFilters").put("args", JSONObject().put("request", request)))
+    }
+
+    /** Each returns null when it worked, else what went wrong */
+    suspend fun install(addon: Addon): String? = attempt("addonInstall", JSONObject().put("transportUrl", addon.transportUrl)) { loadHome() }
+    suspend fun uninstall(addon: Addon): String? = attempt("addonUninstall", JSONObject().put("transportUrl", addon.transportUrl)) { loadHome() }
+    suspend fun installFromLink(url: String): String? = attempt("addonFromUrl", JSONObject().put("url", url)) { loadHome() }
+
+    private suspend fun attempt(op: String, args: JSONObject, after: suspend () -> Unit): String? = try {
+        engine.call(op, args)
+        after()
+        null
+    } catch (e: Exception) {
+        e.message ?: "That didn't work"
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Library (My List's See All)
+
+    fun loadLibrary(type: String?) = scope.launch {
+        val request = JSONObject().put("type", type ?: JSONObject.NULL).put("sort", "lastwatched")
+        ask("load", JSONObject().put("field", "library").put("model", "LibraryWithFilters").put("args", JSONObject().put("request", request)))
+    }
+
+    fun libraryMore() = scope.launch {
+        ask("dispatch", JSONObject().put("field", "library").put("action", JSONObject().put("action", "LibraryWithFilters").put("args", JSONObject().put("action", "LoadNextPage"))))
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Stremio's settings, Customise Home, reviews
+
+    fun updateSettings(changes: JSONObject) = scope.launch { ask("updateSettings", JSONObject().put("changes", changes)) }
+
+    fun saveLayout(layout: HomeLayout) = scope.launch {
+        val data = JSONObject()
+            .put("order", JSONArray(layout.order))
+            .put("hidden", JSONArray(layout.hidden.toList()))
+            .put("names", JSONObject(layout.names))
+        this@Stremio.layout.value = layout
+        dx("homeLayout.save", data)
+        refreshExtras()
+    }
+
+    /** A title's scores and reviews (dx.bi's Reviews: MDBList, Wikidata, Wikipedia, TMDB with the keys set) */
+    suspend fun reviews(type: String, id: String): Reviews? =
+        (engine.runCatching { call("dx", JSONObject().put("method", "phone.reviews").put("args", JSONArray().put(type).put(id)), 40_000) }.getOrNull() as? JSONObject)?.let(Reviews::from)
+
     /** dx.bi settings, as the TV lists them */
     suspend fun settings(): List<Setting> = (ask("settings") as? JSONArray).objects().map(Setting::from)
 
     suspend fun saveSetting(key: String, value: Any?) {
         ask("saveSetting", JSONObject().put("key", key).put("value", value ?: JSONObject.NULL))
         refreshExtras()
-    }
-
-    /** Shows the page itself at [hash] (for what has no native screen yet), optionally running a dx.bi feature there */
-    fun goTo(hash: String, dxMethod: String? = null) = scope.launch {
-        ask("go", JSONObject().put("hash", hash))
-        if (dxMethod != null) {
-            delay(600)
-            dx(dxMethod)
-        }
     }
 
     fun chooseViewer(id: String) = scope.launch {

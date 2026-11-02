@@ -81,7 +81,6 @@ fun HomeScreen(
     onPlay: (Title) -> Unit,
     onResume: (Continue) -> Unit,
     onSearch: () -> Unit,
-    onProfile: () -> Unit,
     onSeeAll: (String) -> Unit,
     onCategories: (String) -> Unit,
 ) {
@@ -91,7 +90,6 @@ fun HomeScreen(
     val myList by stremio.myList.collectAsState()
     val forYou by stremio.forYou.collectAsState()
     val airing by stremio.airing.collectAsState()
-    val viewer by stremio.viewer.collectAsState()
     var filter by rememberSaveable { mutableStateOf(HomeFilter.All) }
     val list = rememberLazyListState()
     // the top bar darkens once Home scrolls under it
@@ -104,7 +102,7 @@ fun HomeScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Dx.Background)) {
-        LazyColumn(state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(state = list, contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current)) {
             item { Spacer(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).height(112.dp)) }
 
             val slides = billboard.filter { fits(it.type) }
@@ -116,7 +114,7 @@ fun HomeScreen(
 
             val resume = continueWatching.filter { fits(it.title.type) }
             if (resume.isNotEmpty()) item(key = "continue") {
-                ContinueRow(viewer?.name, resume, onOpen = { onOpen(it.title) }, onResume = onResume, onRemove = { stremio.removeFromContinue(it.title.id) })
+                ContinueRow(resume, onOpen = { onOpen(it.title) }, onResume = onResume, onRemove = { stremio.removeFromContinue(it.title.id) })
             }
 
             if (filter == HomeFilter.All && airing.isNotEmpty()) item(key = "airing") { AiringRow(airing) { onOpen(Title(it.id, "series", it.name)) } }
@@ -144,7 +142,7 @@ fun HomeScreen(
             }
         }
 
-        TopBar(scrolled, filter, viewer?.name, viewer?.colour, onFilter = { filter = it }, onSearch = onSearch, onProfile = onProfile, onCategories = {
+        TopBar(scrolled, filter, onFilter = { filter = it }, onSearch = onSearch, onCategories = {
             onCategories(if (filter == HomeFilter.Series) "series" else "movie")
         })
     }
@@ -161,27 +159,19 @@ private fun typeSuffix(type: String, ambiguous: Boolean) = if (!ambiguous) "" el
 private fun TopBar(
     scrolled: Boolean,
     filter: HomeFilter,
-    viewerName: String?,
-    viewerColour: String?,
     onFilter: (HomeFilter) -> Unit,
     onSearch: () -> Unit,
-    onProfile: () -> Unit,
     onCategories: () -> Unit,
 ) {
     val shade = if (scrolled) Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.97f)))
     else Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent))
     Column(Modifier.fillMaxWidth().background(shade).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 10.dp)) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(start = Gutter, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (filter == HomeFilter.All) "DX.BI" else filter.label,
-                color = if (filter == HomeFilter.All) Dx.Accent else Dx.Text,
-                fontWeight = FontWeight.Black,
-                fontSize = if (filter == HomeFilter.All) 28.sp else 24.sp,
-                letterSpacing = if (filter == HomeFilter.All) (-0.5).sp else 0.sp,
-                modifier = Modifier.weight(1f).clickable(enabled = filter != HomeFilter.All) { onFilter(HomeFilter.All) },
-            )
+            Box(Modifier.weight(1f)) {
+                if (filter == HomeFilter.All) Logo()
+                else Text(filter.label, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = 24.sp, modifier = Modifier.clickable { onFilter(HomeFilter.All) })
+            }
             IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, contentDescription = "Search", tint = Dx.Text) }
-            IconButton(onClick = onProfile) { ViewerBadge(viewerName ?: "Me", viewerColour, 28.dp) }
         }
         Row(Modifier.padding(horizontal = Gutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (filter != HomeFilter.All) {
@@ -288,9 +278,9 @@ fun TitleArt(t: Title, modifier: Modifier, textSize: Int = 30) {
 }
 
 @Composable
-private fun ContinueRow(viewer: String?, items: List<Continue>, onOpen: (Continue) -> Unit, onResume: (Continue) -> Unit, onRemove: (Continue) -> Unit) {
+private fun ContinueRow(items: List<Continue>, onOpen: (Continue) -> Unit, onResume: (Continue) -> Unit, onRemove: (Continue) -> Unit) {
     Column(Modifier.padding(bottom = 22.dp)) {
-        RowHeader(if (viewer != null && viewer != "Me") "Continue Watching for $viewer" else "Continue Watching")
+        RowHeader("Continue Watching")
         LazyRow(contentPadding = PaddingValues(horizontal = Gutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.title.id }) { c ->
                 var menu by remember { mutableStateOf(false) }

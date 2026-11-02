@@ -85,6 +85,25 @@
     };
   }
 
+  function addon(a) {
+    const m = a.manifest || {};
+    const hints = m.behaviorHints || {};
+    return {
+      transportUrl: a.transportUrl,
+      id: m.id,
+      name: m.name || m.id || "",
+      version: m.version || "",
+      description: m.description || "",
+      logo: m.logo || null,
+      types: m.types || [],
+      official: !!(a.flags && a.flags.official),
+      protected: !!(a.flags && a.flags.protected),
+      configurable: !!hints.configurable,
+      configurationRequired: !!hints.configurationRequired,
+      installed: !!a.installed,
+    };
+  }
+
   const views = {
     ctx(c) {
       const auth = c.profile && c.profile.auth;
@@ -156,6 +175,22 @@
         state: loadable(content),
         items: content && content.type === "Ready" ? content.content.map(preview) : [],
         nextPage: !!selectable.nextPage,
+      };
+    },
+    // Whether the streaming server (for torrents) answers, and where it is
+    streaming_server(s) {
+      return { url: (s.selected && s.selected.transportUrl) || null, state: loadable(s.settings) };
+    },
+    // Addons: the ones installed, and Stremio's Official and Community lists
+    installed_addons(s) {
+      return { items: (s.catalog || []).map(addon) };
+    },
+    remote_addons(s) {
+      const content = s.catalog && s.catalog.content;
+      return {
+        catalogs: ((s.selectable && s.selectable.catalogs) || []).map((c) => ({ name: c.name, selected: !!c.selected, id: (c.deepLinks && c.deepLinks.addons || "").split("/").pop() })),
+        state: loadable(content),
+        items: content && content.type === "Ready" ? content.content.map(addon) : [],
       };
     },
     library(s) {
@@ -240,6 +275,50 @@
     async dismiss({ id }) {
       await core().dispatch({ action: "Ctx", args: { action: "RewindLibraryItem", args: id } });
       await core().dispatch({ action: "Ctx", args: { action: "DismissNotificationItem", args: id } });
+    },
+    // Addons: installed from a list (the whole descriptor, as Stremio wants it) or from a link
+    async addonInstall({ transportUrl }) {
+      const remote = await core().getState("remote_addons");
+      const content = remote && remote.catalog && remote.catalog.content;
+      const found = content && content.type === "Ready" ? content.content.find((a) => a.transportUrl === transportUrl) : null;
+      if (!found) throw new Error("that addon isn't in the list any more");
+      await core().dispatch({ action: "Ctx", args: { action: "InstallAddon", args: { manifest: found.manifest, transportUrl: found.transportUrl, flags: found.flags } } });
+      push("installed_addons");
+      push("remote_addons");
+    },
+    async addonUninstall({ transportUrl }) {
+      const ctx = await core().getState("ctx");
+      const found = ((ctx && ctx.profile && ctx.profile.addons) || []).find((a) => a.transportUrl === transportUrl);
+      if (!found) throw new Error("that addon isn't installed");
+      if (found.flags && found.flags.protected) throw new Error("Stremio needs this addon");
+      await core().dispatch({ action: "Ctx", args: { action: "UninstallAddon", args: found } });
+      push("installed_addons");
+      push("remote_addons");
+    },
+    // A link to an addon's manifest: Stremio fetches it, then it's installed (returns its name)
+    async addonFromUrl({ url }) {
+      const transportUrl = String(url || "").trim().replace(/^stremio:\/\//, "https://");
+      if (!/^https?:\/\/.+/.test(transportUrl)) throw new Error("That isn't an addon link");
+      await core().dispatch({ action: "Load", args: { model: "AddonDetails", args: { transportUrl } } }, "addon_details");
+      for (let i = 0; i < 60; i++) {
+        const s = await core().getState("addon_details");
+        const remote = s && s.remoteAddon && s.remoteAddon.content;
+        if (remote && remote.type === "Ready") {
+          await core().dispatch({ action: "Ctx", args: { action: "InstallAddon", args: remote.content } });
+          push("installed_addons");
+          return remote.content.manifest && remote.content.manifest.name;
+        }
+        if (remote && remote.type === "Err") throw new Error("Couldn't load an addon from that link");
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      throw new Error("The addon didn't answer");
+    },
+    // Stremio's own settings (Settings → Player, Subtitles, Streaming server…), changed a few at a time
+    async updateSettings({ changes }) {
+      const ctx = await core().getState("ctx");
+      const settings = (ctx && ctx.profile && ctx.profile.settings) || {};
+      await core().dispatch({ action: "Ctx", args: { action: "UpdateSettings", args: Object.assign({}, settings, changes) } });
+      push("ctx");
     },
     async signIn({ email, password }) {
       await core().dispatch({ action: "Ctx", args: { action: "Authenticate", args: { type: "Login", email, password } } });

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,6 +70,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.notdxbi.dxbi.tv.phone.Details
 import com.notdxbi.dxbi.tv.phone.Load
+import com.notdxbi.dxbi.tv.phone.Review
+import com.notdxbi.dxbi.tv.phone.Reviews
+import com.notdxbi.dxbi.tv.phone.Score
 import com.notdxbi.dxbi.tv.phone.Stream
 import com.notdxbi.dxbi.tv.phone.Stremio
 import com.notdxbi.dxbi.tv.phone.Title
@@ -90,6 +94,9 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
     var season by rememberSaveable { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(type, id) { stremio.open(type, id) }
+    // scores and reviews (with the TMDB and MDBList keys from dx.bi settings), fetched alongside
+    var reviews by remember(type, id) { mutableStateOf<Reviews?>(null) }
+    LaunchedEffect(type, id) { reviews = stremio.reviews(type, id) }
 
     /** What Play starts: the episode they're in the middle of, else the first one */
     fun nextVideo(d: Details): Video? {
@@ -120,6 +127,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                 }
             }
             item { Header(title, details, onPlay = { details?.let { playVideo(nextVideo(it)?.id) } ?: run { sheet = true } }) }
+            reviews?.scores?.takeIf { it.isNotEmpty() }?.let { scores -> item { ScoreBadges(scores) } }
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
                     val inList = details?.title?.inLibrary == true
@@ -146,6 +154,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                     Episode(v, resumeHere = v.id == details.resumeVideoId) { playVideo(v.id) }
                 }
             }
+            reviews?.let { r -> if (r.critics.isNotEmpty() || r.audience.isNotEmpty() || r.audienceProblem != null || r.problem != null) item { ReviewsSection(r) } }
             if (details != null && details.cast.isNotEmpty()) item {
                 Column(Modifier.padding(horizontal = Gutter, vertical = 16.dp)) {
                     Text("Cast", style = MaterialTheme.typography.titleSmall, color = Dx.Text)
@@ -399,4 +408,102 @@ private fun Tag(text: String, strong: Boolean = false, colour: Color? = null) {
         fontWeight = FontWeight.Black,
         modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(colour ?: if (strong) Color.White else Color.White.copy(alpha = 0.18f)).padding(horizontal = 6.dp, vertical = 2.dp),
     )
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Scores and reviews (dx.bi's Reviews: MDBList or Wikidata scores, Wikipedia, TMDB audience reviews)
+
+/** Each site's score in its own colours: Rotten Tomatoes fresh or rotten, Metacritic green, yellow or red */
+private fun scoreColour(s: Score): Color {
+    val n = s.value.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0f
+    return when (s.source) {
+        "tomatoes", "tomatoesaudience", "popcorn" -> if (n >= 60) Color(0xFFFA320A) else Color(0xFF6B8E23)
+        "metacritic", "metacriticuser" -> if (n >= 61 || (s.source == "metacriticuser" && n >= 6.1f)) Color(0xFF00CE7A) else if (n >= 40 || (s.source == "metacriticuser" && n >= 4f)) Color(0xFFFFBD3F) else Color(0xFFFF6874)
+        "letterboxd" -> Color(0xFF40BCF4)
+        "trakt" -> Color(0xFFED1C24)
+        "tmdb" -> Color(0xFF01B4E4)
+        "imdb" -> Dx.Imdb
+        else -> Dx.Raised
+    }
+}
+
+@Composable
+private fun ScoreBadges(scores: List<Score>) {
+    val context = LocalContext.current
+    LazyRow(contentPadding = PaddingValues(horizontal = Gutter, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(scores.filter { it.source != "imdb" }, key = { it.source }) { s ->
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Dx.Surface).border(1.dp, Dx.Line, RoundedCornerShape(8.dp))
+                    .clickable(enabled = s.url != null) { s.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(scoreColour(s)))
+                Spacer(Modifier.width(7.dp))
+                Column {
+                    Text(s.value, color = Dx.Text, style = MaterialTheme.typography.labelLarge)
+                    Text(if (s.note.isNotEmpty()) "${s.name} · ${s.note}" else s.name, color = Dx.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewsSection(r: Reviews) {
+    val context = LocalContext.current
+    var reading by remember { mutableStateOf<Review?>(null) }
+    var criticsOpen by remember { mutableStateOf(false) }
+    Column(Modifier.padding(top = 18.dp)) {
+        Text("Reviews", style = MaterialTheme.typography.titleMedium, color = Dx.Text, modifier = Modifier.padding(horizontal = Gutter))
+        if (r.critics.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = Gutter, vertical = 10.dp).clip(RoundedCornerShape(10.dp)).background(Dx.Surface).clickable { criticsOpen = !criticsOpen }.padding(14.dp)) {
+                Text("What critics said", color = Dx.Muted, style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(r.critics.joinToString("\n\n"), color = Dx.Text, style = MaterialTheme.typography.bodyMedium, maxLines = if (criticsOpen) Int.MAX_VALUE else 5, overflow = TextOverflow.Ellipsis)
+                if (criticsOpen && r.criticsUrl != null) Text(
+                    "Read more on Wikipedia",
+                    color = Dx.Accent,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 8.dp).clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.criticsUrl))) },
+                )
+            }
+        }
+        if (r.audience.isNotEmpty()) {
+            Text("Audience reviews · TMDB", color = Dx.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = Gutter, top = 6.dp, bottom = 8.dp))
+            LazyRow(contentPadding = PaddingValues(horizontal = Gutter), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(r.audience) { review ->
+                    Column(Modifier.width(270.dp).heightIn(min = 150.dp).clip(RoundedCornerShape(10.dp)).background(Dx.Surface).clickable { reading = review }.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(review.author, color = Dx.Text, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            review.rating?.let { Text("${"%.0f".format(it)}/10", color = Dx.Imdb, style = MaterialTheme.typography.labelMedium) }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(review.text, color = Dx.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        val notes = listOfNotNull(
+            r.audienceProblem?.let { "$it. Check the TMDB key in dx.bi settings." },
+            r.problem?.let { "$it, so these scores come from Wikidata." },
+        )
+        notes.forEach { Text(it, color = Dx.Faint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
+        val credits = listOfNotNull(
+            r.scoresFrom?.let { "Scores from $it" },
+            if (r.critics.isNotEmpty()) "Summary from Wikipedia (CC BY-SA)" else null,
+            if (r.audience.isNotEmpty()) "This product uses the TMDB API but is not endorsed or certified by TMDB" else null,
+        )
+        if (credits.isNotEmpty()) Text(credits.joinToString(" · "), color = Dx.Faint, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = Gutter, vertical = 10.dp))
+    }
+
+    reading?.let { review ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { reading = null },
+            containerColor = Dx.Surface,
+            title = { Text(review.author + (review.rating?.let { " · ${"%.0f".format(it)}/10" } ?: "")) },
+            text = { LazyColumn(Modifier.heightIn(max = 460.dp)) { item { Text(review.text, color = Dx.Text, style = MaterialTheme.typography.bodyMedium) } } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { reading = null }) { Text("Close") } },
+        )
+    }
 }

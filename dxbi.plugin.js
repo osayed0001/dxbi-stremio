@@ -15107,6 +15107,25 @@
         const { order, hidden, names } = homeLayout.data();
         return { order, hidden, names };
       },
+      // A title's scores (MDBList with a key, else Wikidata), what critics said (Wikipedia) and audience
+      // reviews (TMDB, with a key): what the Reviews sheet shows
+      async reviews(type, id) {
+        if (!settings.reviews) return null;
+        const t = { type, id, key: `${type}:${id}` };
+        const data = reviews.data.get(t.key) || (await reviews.load(t));
+        const [wiki, tmdb] = await Promise.all([
+          data.article ? reviews.wikipedia(data.article).catch(() => null) : null,
+          settings.tmdbKey.trim() && (data.ids.imdb || data.ids.tmdb) ? reviews.tmdb(data.ids).catch((err) => ({ error: err.message })) : null,
+        ]);
+        return {
+          scores: (data.scores || []).map((s) => ({ source: s.source, name: s.name, note: s.note || "", value: String(s.value), votes: s.votes || 0, url: s.url || null })),
+          scoresFrom: data.fromMdblist ? "MDBList" : data.scores && data.scores.length ? "Wikidata" : null,
+          mdbError: data.mdbError || null,
+          critics: wiki && wiki.text && wiki.text.length ? { text: wiki.text, url: wiki.url } : null,
+          audience: tmdb ? { reviews: tmdb.reviews || [], total: tmdb.total || 0, url: tmdb.url || null, error: tmdb.error || null } : null,
+          missing: [!settings.tmdbKey.trim() && "tmdb", !settings.mdblistKey.trim() && "mdblist"].filter(Boolean),
+        };
+      },
       // Who's watching? (choose one with viewers.select)
       viewers() {
         const v = viewers.list();

@@ -86,13 +86,13 @@ class MainActivity : AppCompatActivity() {
         // and running, just covered). For now only debug builds, while the screens are being built.
         if (BuildConfig.DEBUG && Bridge(this).isPhone()) {
             val engine = Engine(::js).also { engine = it }
-            phoneUi = ComposeView(this).apply {
-                setContent { PhoneApp(engine, showPage = { visible -> this.visibility = if (visible) View.GONE else View.VISIBLE }) }
-            }
+            // (where it draws nothing, touches reach the page: how the page shows through when it's needed)
+            phoneUi = ComposeView(this).apply { setContent { PhoneApp(engine) } }
             root.addView(phoneUi, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
-        // Only when dx.bi is opened, not when the screen is rebuilt (after a page crash, a turned phone)
-        if (savedInstanceState == null) intro = Intro(this, root).also { it.start() }
+        // Only when dx.bi is opened, not when the screen is rebuilt (after a page crash, a turned phone).
+        // Not on phones: the film is made for a TV screen.
+        if (savedInstanceState == null && !Bridge(this).isPhone()) intro = Intro(this, root).also { it.start() }
         web.setBackgroundColor(getColor(R.color.background))
         web.isFocusable = true
         web.isFocusableInTouchMode = true
