@@ -1,6 +1,8 @@
 package com.notdxbi.dxbi.tv.phone
 
 import android.content.Context
+import com.notdxbi.dxbi.tv.Cast
+import com.notdxbi.dxbi.tv.PlaybackBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,6 +24,8 @@ import org.json.JSONObject
  * launches so the app opens on the last Home it showed) and what they can do. All of it through [Engine].
  */
 class Stremio(context: Context, val engine: Engine, private val scope: CoroutineScope) {
+
+    private val app = context.applicationContext
 
     private val cache = context.getSharedPreferences("phone-cache", Context.MODE_PRIVATE)
 
@@ -182,8 +186,12 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     /** The open title's streams, described by dx.bi, with Just press Play's pick */
     suspend fun streams(): StreamChoices? = (dx("phone.streams") as? JSONObject)?.let(StreamChoices::from)
 
-    /** Plays one of [streams] (dx.bi keeps the next best ready in case it won't play) */
-    fun play(option: StreamOption) = scope.launch {
+    /**
+     * Plays one of [streams] (dx.bi keeps the next best ready in case it won't play): in dx.bi's
+     * player, another app, on a Chromecast (where Play goes anyway while one is connected) or as a download
+     */
+    fun play(option: StreamOption, target: PlaybackBus.Target = PlaybackBus.Target.Player) = scope.launch {
+        PlaybackBus.nextTarget = if (target == PlaybackBus.Target.Player && !option.torrent && Cast.connected(app)) PlaybackBus.Target.Cast else target
         val link = dx("phone.play", option.index) as? String ?: option.play
         ask("play", JSONObject().put("link", link))
     }

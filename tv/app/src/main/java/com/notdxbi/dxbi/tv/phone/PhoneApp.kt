@@ -203,6 +203,7 @@ private fun Screens(stremio: Stremio) {
                         stremio,
                         onOpen = { nav.openTitle(it) },
                         onLibrary = { nav.navigate("library") },
+                        onDownloads = { nav.navigate("downloads") },
                         onCustomiseHome = { nav.navigate("customise") },
                         onSettings = { nav.navigate("settings") },
                         onStremioSettings = { nav.navigate("playback") },
@@ -240,6 +241,7 @@ private fun Screens(stremio: Stremio) {
                         ?: if (type == "series") "Series" else if (type.isNotEmpty()) "Films" else "Browse"
                     DiscoverScreen(stremio, title, onBack = { nav.popBackStack() }, onOpen = { nav.openTitle(it) })
                 }
+                composable("downloads") { com.notdxbi.dxbi.tv.phone.ui.DownloadsScreen(onBack = { nav.popBackStack() }) }
                 composable("library") { LibraryScreen(stremio, onBack = { nav.popBackStack() }, onOpen = { nav.openTitle(it) }) }
                 composable("customise") { CustomiseHomeScreen(stremio, onBack = { nav.popBackStack() }) }
                 composable("settings") { SettingsScreen(stremio, onBack = { nav.popBackStack() }) }

@@ -173,3 +173,20 @@ fun ViewerBadge(name: String, colour: String?, size: Dp = 30.dp) {
 
 @Composable
 fun Dot() = Box(Modifier.padding(horizontal = 6.dp).size(3.dp).clip(CircleShape).background(Dx.Muted))
+
+/** The cast button (Google's own: it opens the device list, and shows when one is connected) */
+@Composable
+fun CastButton(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // (no button without Google Play services: nothing to cast with)
+    val available = androidx.compose.runtime.remember { com.notdxbi.dxbi.tv.Cast.context(context) != null }
+    if (!available) return
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { ctx ->
+            androidx.mediarouter.app.MediaRouteButton(android.view.ContextThemeWrapper(ctx, androidx.mediarouter.R.style.Theme_MediaRouter)).also {
+                com.google.android.gms.cast.framework.CastButtonFactory.setUpMediaRouteButton(ctx, it)
+            }
+        },
+        modifier = modifier.size(48.dp),
+    )
+}

@@ -261,7 +261,21 @@ class MainActivity : AppCompatActivity() {
 
     fun play(json: String) {
         PlaybackBus.started(json)
-        startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_STREAM, json))
+        when (PlaybackBus.takeTarget()) {
+            PlaybackBus.Target.Player -> startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_STREAM, json))
+            PlaybackBus.Target.External -> ExternalPlayer.open(this, json, externalPlayer)
+            PlaybackBus.Target.Cast -> Cast.play(this, json)
+            PlaybackBus.Target.Download -> {
+                Downloads.add(this, json)
+                // nothing plays: the page goes back to where it was
+                PlaybackBus.closed(0, 0, ended = false, error = null)
+            }
+        }
+    }
+
+    /** Another app playing a stream (VLC, mpv, MX Player…): it says where it got to when it closes */
+    private val externalPlayer = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        ExternalPlayer.finished(result.data)
     }
 
     fun openExternal(url: String) {

@@ -76,6 +76,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.asPaddingValues
+import com.notdxbi.dxbi.tv.PlaybackBus
 import com.notdxbi.dxbi.tv.phone.Details
 import com.notdxbi.dxbi.tv.phone.Load
 import com.notdxbi.dxbi.tv.phone.Review
@@ -130,10 +131,16 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
     LaunchedEffect(details) { if (details?.videoId != null) choices = stremio.streams() }
     val current = choices?.takeIf { details?.videoId != null && it.videoId == details.videoId }
 
-    fun play(option: StreamOption) {
+    // (Android 13 and later ask before an app shows notifications: downloads show their progress in one)
+    val notifications = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+
+    fun play(option: StreamOption, target: PlaybackBus.Target = PlaybackBus.Target.Player) {
         waitingFor = null
         sheet = false
-        stremio.play(option)
+        if (target == PlaybackBus.Target.Download && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        stremio.play(option, target)
     }
 
     fun start(videoId: String?) {
@@ -251,7 +258,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                             Spacer(Modifier.width(8.dp))
                             Text("Episodes", color = Dx.Text, style = MaterialTheme.typography.labelLarge)
                         }
-                        StreamPicker(current, if (type == "series") episodeLine else "Streams", null, onPlay = ::play, modifier = Modifier.fillMaxSize())
+                        StreamPicker(current, if (type == "series") episodeLine else "Streams", null, onPlay = { play(it) }, modifier = Modifier.fillMaxSize(), onPlayIn = ::play)
                     }
                 }
             }
@@ -261,6 +268,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
             onClick = onBack,
             modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)),
         ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White) }
+        if (!wide) CastButton(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)))
     }
 
     if (sheet && !wide) {
@@ -270,7 +278,8 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                 current,
                 title.name,
                 episodeLine,
-                onPlay = ::play,
+                onPlay = { play(it) },
+                onPlayIn = ::play,
                 modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
                 bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
             )

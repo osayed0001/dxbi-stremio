@@ -171,6 +171,7 @@ private fun TopBar(
                 if (filter == HomeFilter.All) Logo()
                 else Text(filter.label, color = Dx.Text, fontWeight = FontWeight.Black, fontSize = 24.sp, modifier = Modifier.clickable { onFilter(HomeFilter.All) })
             }
+            CastButton()
             IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, contentDescription = "Search", tint = Dx.Text) }
         }
         Row(Modifier.padding(horizontal = Gutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -105,6 +105,9 @@ dependencies {
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
     // Phones: lock screen, headphone and picture-in-picture controls
     implementation("androidx.media3:media3-session:1.5.1")
+    // Phones: casting to a Chromecast or Google TV (only started when something is cast)
+    implementation("com.google.android.gms:play-services-cast-framework:22.0.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
     // Sound the device can't decode itself: most phones have no Dolby or DTS decoder, so those films
     // played silently. Jellyfin's build of Media3's FFmpeg extension; the hardware still goes first
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")

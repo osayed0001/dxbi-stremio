@@ -69,6 +69,8 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var controls: PlayerControls
     private var gestures: PlayerGestures? = null
     private var session: MediaSession? = null
+    // a download playing from the phone (its id), rather than a stream the page handed over
+    private var offlineId: String? = null
     // the subtitles' size (Stremio's setting), put back after the small window's bigger one
     private var subtitleSize = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION
     private lateinit var zoom: PictureZoom
@@ -262,9 +264,12 @@ class PlayerActivity : AppCompatActivity() {
             .build()
         // (an addon's own User-Agent replaces ours: Media3 would send both)
         val ownAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
-        val dataSource = OkHttpDataSource.Factory(http)
+        val online = OkHttpDataSource.Factory(http)
             .setUserAgent(if (ownAgent) null else "dxbi-tv/${BuildConfigVersion.name(this)}")
             .setDefaultRequestProperties(headers)
+        // a download plays from the phone
+        offlineId = stream.optString("offline").ifEmpty { null }
+        val dataSource = if (offlineId != null) Downloads.playback(this) else online
 
         // The TV's own decoders first, falling back to software ones when a format isn't supported
         val renderers = Renderers()
@@ -537,7 +542,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun report() {
         val exo = player ?: return
         val duration = exo.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-        PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
+        if (offlineId != null) Downloads.leftAt(offlineId!!, exo.currentPosition, ended = false)
+        else PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
     }
 
     private fun finishWith(ended: Boolean = false, error: String? = null, next: Boolean = false) {
@@ -548,7 +554,10 @@ class PlayerActivity : AppCompatActivity() {
         val exo = player
         val duration = exo?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
         val position = if (ended) duration else exo?.currentPosition ?: 0L
-        PlaybackBus.closed(position, duration, ended, error, next)
+        // A download wasn't handed over by the page: its place is kept here instead
+        val offline = offlineId
+        if (offline != null) Downloads.leftAt(offline, position, ended)
+        else PlaybackBus.closed(position, duration, ended, error, next)
         if (torrent) TorrentEngine.close()
         finish()
     }

@@ -10,3 +10,6 @@
 
 # The FFmpeg audio decoder: Media3 finds it by name and builds it by reflection
 -keep class androidx.media3.decoder.ffmpeg.** { *; }
+
+# Casting: Google's framework finds its options by this class's name (AndroidManifest.xml)
+-keep class com.notdxbi.dxbi.tv.CastSetup { *; }

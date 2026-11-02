@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.notdxbi.dxbi.tv.PlaybackBus
 import com.notdxbi.dxbi.tv.phone.StreamChoices
 import com.notdxbi.dxbi.tv.phone.StreamOption
 
@@ -61,6 +63,8 @@ fun StreamPicker(
     onPlay: (StreamOption) -> Unit,
     modifier: Modifier = Modifier,
     bottom: Dp = 24.dp,
+    /** The ⋮ menu: another app, a Chromecast, or a download */
+    onPlayIn: (StreamOption, PlaybackBus.Target) -> Unit = { s, _ -> onPlay(s) },
 ) {
     var quality by rememberSaveable { mutableStateOf<String?>(null) }
     var provider by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,7 +127,7 @@ fun StreamPicker(
                 }
             }
         }
-        items(shown, key = { it.index }) { s -> StreamRow(s, picked = s.index == choices?.pick) { onPlay(s) } }
+        items(shown, key = { it.index }) { s -> StreamRow(s, picked = s.index == choices?.pick, onPlayIn = { target -> onPlayIn(s, target) }) { onPlay(s) } }
         if (searching) item {
             Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(color = Dx.Accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -161,7 +165,8 @@ private fun <T> Menu(label: String, options: List<Pair<T, String>>, onPick: (T) 
 }
 
 @Composable
-private fun StreamRow(s: StreamOption, picked: Boolean, onPlay: () -> Unit) {
+private fun StreamRow(s: StreamOption, picked: Boolean, onPlayIn: (PlaybackBus.Target) -> Unit, onPlay: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
     Column(
         Modifier.padding(horizontal = Gutter, vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Dx.Surface)
             .then(if (picked) Modifier.border(1.dp, Dx.Accent, RoundedCornerShape(10.dp)) else Modifier)
@@ -177,6 +182,22 @@ private fun StreamRow(s: StreamOption, picked: Boolean, onPlay: () -> Unit) {
                 s.instant -> Tag("INSTANT", colour = Color(0xFF2E7D32))
                 s.pending -> Tag("NOT CACHED", colour = Color(0xFF8D6E00))
                 s.torrent -> Tag("TORRENT")
+            }
+            Box {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = "More ways to play",
+                    tint = Dx.Muted,
+                    modifier = Modifier.padding(start = 4.dp).size(22.dp).clip(CircleShape).clickable { menu = true },
+                )
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Play in another app") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.External) })
+                    // (a torrent plays from the phone itself: a TV can't reach it, and it isn't a file to save)
+                    if (!s.torrent) {
+                        DropdownMenuItem(text = { Text("Cast to a TV") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.Cast) })
+                        DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.Download) })
+                    }
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
