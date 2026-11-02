@@ -54,10 +54,14 @@
     return {
       catalogs: (state.catalogs || []).map((c, index) => ({
         index,
+        // the key Customise Home saves rows under
+        key: `${(c.addon && c.addon.manifest && c.addon.manifest.id) || ""}/${c.type}/${c.id}`,
         id: c.id,
         name: c.name,
         type: c.type,
         addon: (c.addon && c.addon.manifest && c.addon.manifest.name) || "",
+        // Discover for this row (See All)
+        discover: (c.deepLinks && c.deepLinks.discover) || null,
         state: loadable(c.content),
         items: c.content && c.content.type === "Ready" ? c.content.content.map(preview) : [],
       })),
@@ -140,6 +144,20 @@
         })),
       };
     },
+    // See All / Categories: one catalog, its genres and its pages
+    discover(s) {
+      const content = s.catalog && s.catalog.content;
+      const selectable = s.selectable || {};
+      const genre = (selectable.extra || []).find((e) => e.name === "genre");
+      return {
+        request: (s.selected && s.selected.request) || null,
+        catalogs: (selectable.catalogs || []).map((c) => ({ name: c.name, selected: !!c.selected })),
+        genres: genre ? genre.options.map((o) => o.value).filter((v) => v) : [],
+        state: loadable(content),
+        items: content && content.type === "Ready" ? content.content.map(preview) : [],
+        nextPage: !!selectable.nextPage,
+      };
+    },
     library(s) {
       return {
         selected: s.selected || null,
@@ -209,18 +227,50 @@
     async loadRange({ field, start, end }) {
       await core().dispatch({ action: "CatalogsWithExtra", args: { action: "LoadRange", args: { start, end } } }, field);
     },
+    // My List: the title open in details, added or removed (Stremio wants the whole item to add it)
+    async library({ add }) {
+      const s = await core().getState("meta_details");
+      const meta = s && s.metaItem && s.metaItem.content;
+      if (!meta || meta.type !== "Ready") throw new Error("no title open");
+      const item = meta.content;
+      await core().dispatch({ action: "Ctx", args: add ? { action: "AddToLibrary", args: item } : { action: "RemoveFromLibrary", args: item.id } });
+      push("meta_details");
+    },
+    // Continue watching: "Remove from row", as Stremio does it
+    async dismiss({ id }) {
+      await core().dispatch({ action: "Ctx", args: { action: "RewindLibraryItem", args: id } });
+      await core().dispatch({ action: "Ctx", args: { action: "DismissNotificationItem", args: id } });
+    },
+    async signIn({ email, password }) {
+      await core().dispatch({ action: "Ctx", args: { action: "Authenticate", args: { type: "Login", email, password } } });
+    },
+    async signOut() {
+      await core().dispatch({ action: "Ctx", args: { action: "Logout" } });
+    },
     // Playing: Stremio's own player route, which dxbi-tv.js hands to the native player
     play({ link }) {
       if (!/^#\/player\//.test(link || "")) throw new Error("not a player link");
       location.hash = link;
     },
     // dx.bi's own features (window.__dxbi)
+    // ("phone.billboard", "viewers.select"…: called on the object it belongs to)
     async dx({ method, args }) {
-      const dx = window.__dxbi;
-      if (!dx || typeof dx[method] !== "function") throw new Error(`dx.bi has no ${method}`);
-      return await dx[method](...(args || []));
+      const path = String(method || "").split(".");
+      let owner = window.__dxbi;
+      for (const part of path.slice(0, -1)) owner = owner && owner[part];
+      const fn = owner && owner[path[path.length - 1]];
+      if (typeof fn !== "function") throw new Error(`dx.bi has no ${method}`);
+      return await fn.apply(owner, args || []);
     },
     route() { return location.hash; },
+    // The page itself, for what has no native screen yet (Stremio's settings, addons…)
+    go({ hash }) {
+      if (!/^#\//.test(hash || "")) throw new Error("not a page address");
+      location.hash = hash;
+    },
+    // dx.bi settings (dxbi-tv.js keeps the list the TV shows)
+    settings() { return window.__dxbiTv && window.__dxbiTv.settings ? window.__dxbiTv.settings() : []; },
+    async saveSetting({ key, value }) { await window.__dxbiTv.saveSetting(key, value); },
   };
 
   window.__dxbiEngine = {

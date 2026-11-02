@@ -147,3 +147,41 @@ assert.equal(pageEvents.length, 2, "the page still hears every event");
 window.onCoreEvent({ name: "CoreEvent", args: { event: "UserAuthenticated", args: null } });
 assert.deepEqual(sent.at(-1), { type: "event", event: "UserAuthenticated", args: null });
 console.log("PASS watched models follow Stremio's changes; the page keeps its events");
+
+// Home rows carry the key Customise Home saves them under, and See All's link
+states.board.catalogs[0].addon.manifest.id = "com.linvo.cinemeta";
+states.board.catalogs[0].deepLinks = { discover: "#/discover/x/movie/top" };
+const keyed = (await ask(20, "get", { field: "board" })).data.catalogs[0];
+assert.equal(keyed.key, "com.linvo.cinemeta/movie/top");
+assert.equal(keyed.discover, "#/discover/x/movie/top");
+states.discover = {
+  selected: { request: { base: "b", path: { resource: "catalog", type: "movie", id: "top", extra: [["genre", "Drama"]] } } },
+  selectable: { catalogs: [{ name: "Popular", selected: true }], extra: [{ name: "genre", options: [{ value: null }, { value: "Drama" }, { value: "Action" }] }], nextPage: true },
+  catalog: { content: { type: "Ready", content: [states.board.catalogs[0].content.content[0]] } },
+};
+const discover = (await ask(21, "get", { field: "discover" })).data;
+assert.deepEqual(discover.genres, ["Drama", "Action"]);
+assert.equal(discover.items[0].name, "Film");
+assert.equal(discover.nextPage, true);
+console.log("PASS row keys, See All links and Discover");
+
+// My List works on the title open in details; Continue watching's "Remove from row"
+await ask(22, "library", { add: true });
+assert.equal(dispatched.at(-1).action.args.action, "AddToLibrary");
+assert.equal(dispatched.at(-1).action.args.args.id, "tt2", "the whole item, as Stremio wants it");
+await ask(23, "library", { add: false });
+assert.deepEqual(dispatched.at(-1).action.args, { action: "RemoveFromLibrary", args: "tt2" });
+await ask(24, "dismiss", { id: "tt2" });
+assert.deepEqual(dispatched.slice(-2).map((d) => d.action.args.action), ["RewindLibraryItem", "DismissNotificationItem"]);
+console.log("PASS My List and Remove from row");
+
+// dx.bi's features, by path, called on the object they belong to
+window.__dxbi = { phone: { who: "phone", name() { return this.who; } }, viewers: { list: [], select(id) { this.list.push(id); return id; } } };
+assert.equal((await ask(25, "dx", { method: "phone.name" })).data, "phone");
+assert.equal((await ask(26, "dx", { method: "viewers.select", args: ["v1"] })).data, "v1");
+assert.deepEqual([...window.__dxbi.viewers.list], ["v1"]);
+assert.equal((await ask(27, "dx", { method: "phone.nope" })).ok, false);
+assert.equal((await ask(28, "go", { hash: "javascript:alert(1)" })).ok, false, "only the page's own addresses");
+assert.equal((await ask(29, "go", { hash: "#/settings" })).ok, true);
+assert.equal(window.location.hash, "#/settings");
+console.log("PASS dx.bi's features and the page's own screens");

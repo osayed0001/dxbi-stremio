@@ -1,6 +1,7 @@
 package com.notdxbi.dxbi.tv.phone
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
@@ -28,6 +29,9 @@ class Engine(private val run: (String) -> Unit) {
 
     /** Whether Stremio's core is up in the page (it starts again with the page after a crash) */
     val ready = MutableStateFlow(false)
+
+    /** Stremio's core events: UserAuthenticated, Error ({source, error: {message}}), LibraryItemsPulledFromAPI… */
+    val events = MutableSharedFlow<Pair<String, JSONObject?>>(extraBufferCapacity = 16)
 
     /** A model's state as the screens need it (dxbi-engine.js trims it), kept current; null until it arrives */
     fun state(field: String): StateFlow<JSONObject?> {
@@ -71,6 +75,7 @@ class Engine(private val run: (String) -> Unit) {
                 // A page that started again has forgotten what was watched
                 if (watched.isNotEmpty()) send("watch", JSONObject().put("fields", JSONArray(watched.toList())))
             }
+            "event" -> events.tryEmit(message.optString("event") to message.optJSONObject("args"))
             "gone" -> ready.value = false
         }
     }

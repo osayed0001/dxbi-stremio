@@ -386,6 +386,22 @@
     render();
   }
 
+  // dx.bi's phone app draws the same list itself: what's in it, and saving a change
+  tv.settings = () => {
+    const plugin = PLUGIN.replace(/\.plugin\.js$/, "");
+    const values = readSettings(plugin);
+    return (schemas[plugin] || []).filter((o) => !DESKTOP_ONLY.has(o.key) && o.key !== "focusColour").map((o) => ({
+      key: o.key,
+      type: o.type,
+      label: forDevice(o.label),
+      description: forDevice(o.description || ""),
+      group: o.group || "",
+      options: (o.options || []).map((x) => ({ value: x.value, label: x.label })),
+      value: values[o.key] === undefined ? o.defaultValue : values[o.key],
+    }));
+  };
+  tv.saveSetting = (key, value) => api.saveSetting(PLUGIN.replace(/\.plugin\.js$/, ""), key, value);
+
   function ensureSettingsEntry() {
     if (!/^#\/settings/.test(location.hash)) return;
     // also in Settings' own list (General, Interface… Shortcuts), where people look for it

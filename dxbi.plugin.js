@@ -15033,6 +15033,86 @@
     episodes,
     calendarFill,
     report,
+    // dx.bi's phone app: what Home's own rows show, as data for its native screens (read only; the
+    // page's rows above are built from the same things)
+    phone: {
+      async billboard() {
+        if (!settings.billboard) return [];
+        const items = hero.items.length ? hero.items : await hero.load();
+        return items.map((m) => ({
+          id: m.id,
+          type: m.type,
+          name: m.name,
+          description: m.description || "",
+          background: hero.background(m),
+          logo: artworkUrl(m.logo) || (isImdb(m.id) && metadataSource.englishArtFits(m._configuredMeta || !m._stock) ? art.logo(m.id) : null),
+          year: m.releaseInfo ? String(m.releaseInfo) : "",
+          runtime: formatRuntime(m.runtime),
+          genres: (m.genres || m.genre || []).slice(0, 3),
+          imdb: m.imdbRating || null,
+        }));
+      },
+      myList() {
+        if (settings.myList === "off") return [];
+        return myList.groups().map(([name, list]) => ({
+          name,
+          items: list.map((i) => ({ id: i._id, type: i.type, name: i.name, poster: i.poster || (isImdb(i._id) ? `https://images.metahub.space/poster/small/${i._id}/img` : null) })),
+        }));
+      },
+      // null while it's still being worked out (ask again shortly)
+      forYou() {
+        if (!settings.forYou || viewers.current().kids) return { items: [] };
+        const seed = forYou.seed();
+        if (!seed) return { items: [] };
+        const sig = `${viewers.current().id}|${seed._id}`;
+        const data = forYou.saved(sig);
+        if (!data) {
+          if (forYou.loading !== sig) {
+            forYou.loading = sig;
+            forYou.load(seed, sig).catch(() => { forYou.loading = null; });
+          }
+          return null;
+        }
+        return { name: `Because you watched ${data.name}`, items: data.list.map((i) => ({ id: i._id, type: i.type, name: i.name, poster: i.poster || null })) };
+      },
+      // Airing this week: each show's next episode (or the one just out), soonest first
+      airing() {
+        if (!settings.airingRow) return [];
+        episodes.refresh();
+        const byShow = new Map();
+        for (const [id, e] of episodes.index) {
+          const eps = e.upcoming || [];
+          if (!eps.length) continue;
+          const key = String(e.name || id).toLowerCase().replace(/[^a-z0-9]+/g, "");
+          const prev = byShow.get(key);
+          if (!prev || eps[0].t < prev.ep.t) byShow.set(key, { id, e, ep: eps[0], more: eps.length - 1 });
+        }
+        return [...byShow.values()].sort((a, b) => a.ep.t - b.ep.t).slice(0, 12).map(({ id, e, ep, more }) => ({
+          id,
+          name: e.name || "",
+          background: e.background || (isImdb(id) ? art.backgroundMedium(id) : e.poster || null),
+          still: ep.t <= Date.now() ? ep.th || null : null,
+          season: ep.s,
+          episode: ep.e,
+          title: ep.n && !/^episode\s*\d+$/i.test(ep.n) ? ep.n : "",
+          more,
+          time: ep.t,
+          when: whenText(ep.t),
+          countdown: countdownText(ep.t),
+          out: ep.t <= Date.now(),
+        }));
+      },
+      // Customise Home, for this viewer: rows by `${addon id}/${type}/${catalog id}`
+      layout() {
+        const { order, hidden, names } = homeLayout.data();
+        return { order, hidden, names };
+      },
+      // Who's watching? (choose one with viewers.select)
+      viewers() {
+        const v = viewers.list();
+        return { current: viewers.current().id, list: v.list.map((x) => ({ id: x.id, name: x.name || "", colour: x.colour || null, kids: !!x.kids })) };
+      },
+    },
     // dx.bi TV's player: intro, recap and credits times for an episode ([] when nobody has added them)
     async skipSegments(type, metaId, videoId) {
       if (!settings.skipButtons) return [];

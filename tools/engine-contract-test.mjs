@@ -34,6 +34,15 @@ for (const name of ["settings", "viewers", "whoIsWatching", "homeLayout", "episo
   assert.match(api, new RegExp(`\\n\\s+(async\\s+)?${name}\\b`), `plugin api still has ${name}`);
 }
 assert.match(plugin, /window\.__dxbi = api/, "the api is window.__dxbi");
+// the phone app's own entry (Home's billboard and rows as data), and what it builds on
+const phone = block(api, "    phone: {");
+for (const name of ["billboard", "myList", "forYou", "airing", "layout", "viewers"]) {
+  assert.match(phone, new RegExp(`\\n\\s+(async\\s+)?${name}\\(`), `api.phone.${name}`);
+}
+for (const [owner, method] of [["hero", "load"], ["hero", "background"], ["myList", "groups"], ["forYou", "seed"], ["forYou", "saved"], ["forYou", "load"],
+  ["episodes", "refresh"], ["homeLayout", "data"], ["homeLayout", "open"], ["viewers", "current"], ["viewers", "list"], ["viewers", "select"]]) {
+  assert.match(block(plugin, `  const ${owner} = {`), new RegExp(`\\n    (async )?${method}\\(`), `${owner}.${method} (used by api.phone or the phone app)`);
+}
 console.log("PASS the plugin's api has what the phone app calls");
 
 // 2. dx.bi's settings, drawn natively from their description
@@ -50,6 +59,8 @@ const payload = block(tv, "native.play(JSON.stringify({", true);
 for (const key of ["hash", "videoId", "skips", "url", "title", "subtitle", "startMs", "headers", "subtitles", "next", "upNext", "audioLanguage", "subtitleStyle", "background"]) {
   assert.match(payload, new RegExp(`\\n\\s+${key}\\b`), `play payload has ${key}`);
 }
+// dx.bi settings, which the phone app draws natively from dxbi-tv.js's list
+for (const name of ["settings", "saveSetting"]) assert.match(tv, new RegExp(`tv\\.${name} = `), `dxbi-tv.js offers __dxbiTv.${name}`);
 for (const callback of ["onProgress", "playerClosed", "onPartyTick", "back"]) {
   assert.match(tv, new RegExp(`tv\\.${callback} = `), `dxbi-tv.js still offers __dxbiTv.${callback}`);
   assert.ok(main.includes(`__dxbiTv.${callback}`), `MainActivity still calls __dxbiTv.${callback}`);
