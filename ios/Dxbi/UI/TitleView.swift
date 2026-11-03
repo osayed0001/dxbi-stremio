@@ -2,8 +2,8 @@ import SwiftUI
 
 /**
  * A film or show, the Apple TV way: its art at the top in the art's own colour, the logo, Play (one
- * tap: dx.bi picks the stream), then the seasons and episodes. Sideways, the details sit on the left
- * and the episodes on the right.
+ * tap: dx.bi picks the stream), then the seasons and episodes. The art stays put as the page scrolls
+ * up over it, fading and blurring away.
  */
 struct TitleView: View {
     @Environment(Stremio.self) private var stremio
@@ -20,6 +20,8 @@ struct TitleView: View {
     @State private var reviewsOpen = false
     @State private var moreText = false
     @State private var autoPlayed = false
+    /** The cast with photos (TMDB, with a key in dx.bi settings), else nil */
+    @State private var cast: [JSON]?
 
     private var details: Details? { stremio.details?.metaId == ref.id ? stremio.details : nil }
     private var title: Title { details?.title ?? Title(id: ref.id, type: ref.type, name: ref.name) }
@@ -30,40 +32,20 @@ struct TitleView: View {
 
     var body: some View {
         GeometryReader { g in
-            let wide = g.size.width > g.size.height && g.size.width > 600
-            Group {
-                if wide {
-                    HStack(spacing: 0) {
-                        ScrollView { header(width: g.size.width * 0.45, wide: true) }
-                            .frame(width: g.size.width * 0.45)
-                        Divider().overlay(.white.opacity(0.08))
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 24) {
-                                if ref.type == "series" { episodes(width: g.size.width * 0.55, vertical: true) }
-                                extras
-                            }
-                            .padding(.vertical, 24)
-                        }
-                        .background(.black)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header(width: g.size.width)
+                    VStack(alignment: .leading, spacing: 30) {
+                        if ref.type == "series" { episodes(width: g.size.width) }
+                        extras
                     }
-                    .ignoresSafeArea(edges: .top)
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            header(width: g.size.width, wide: false)
-                            VStack(alignment: .leading, spacing: 30) {
-                                if ref.type == "series" { episodes(width: g.size.width, vertical: false) }
-                                extras
-                            }
-                            .padding(.vertical, 26)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.black)
-                        }
-                    }
-                    .ignoresSafeArea(edges: .top)
+                    .padding(.vertical, 26)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.black)
                 }
             }
             .scrollIndicators(.hidden)
+            .ignoresSafeArea(edges: .top)
         }
         .background(tint.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -83,6 +65,9 @@ struct TitleView: View {
         .task(id: ref.id) {
             if stremio.details?.metaId != ref.id { stremio.open(ref.type, ref.id) }
             reviews = await stremio.reviews(ref.type, ref.id)
+        }
+        .task(id: title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : "")) {
+            if let imdb = title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : nil) { cast = await stremio.cast(ref.type, imdb) }
         }
         .task(id: title.background ?? title.poster) {
             if let c = await ArtColour.of(title.backdrop) { withAnimation(.easeOut(duration: 0.4)) { tint = c } }
@@ -162,12 +147,12 @@ struct TitleView: View {
 
     // MARK: - The top: art, logo, Play
 
-    private func header(width: CGFloat, wide: Bool) -> some View {
-        VStack(spacing: 14) {
-            Art(url: title.backdrop)
-                .frame(width: width, height: wide ? width * 0.62 : width * 0.9)
-                .clipped()
-                .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.3), location: 0), .init(color: .clear, location: 0.3), .init(color: tint, location: 1)], startPoint: .top, endPoint: .bottom))
+    private func header(width: CGFloat) -> some View {
+        let artHeight = width * 0.9
+        return VStack(spacing: 14) {
+            // the art is behind (below); this space shows it, with the logo low on it
+            Color.clear
+                .frame(width: width, height: artHeight)
                 .overlay(alignment: .bottom) {
                     TitleLogo(title: title, maxHeight: 110, textSize: 38)
                         .frame(maxWidth: min(width * 0.75, 380))
@@ -178,9 +163,6 @@ struct TitleView: View {
                     .font(.subheadline)
                     .foregroundStyle(Dx.muted)
                     .padding(.top, 6)
-                PrimaryPill(label: playLabel) { start(details.flatMap(nextVideo)?.id) }
-                    .frame(maxWidth: 360)
-                    .disabled(details?.state != .ready)
                 buttons
                 if let d = title.description {
                     Button { withAnimation(.snappy) { moreText.toggle() } } label: {
@@ -199,17 +181,30 @@ struct TitleView: View {
             .padding(.horizontal, Dx.gutter)
             .padding(.bottom, 24)
         }
+        .background(alignment: .top) {
+            // Apple TV's: the page scrolls up over the art, which stays where it is and fades and
+            // blurs as it's covered (and grows when the page is pulled down)
+            Art(url: title.backdrop)
+                .frame(width: width, height: artHeight)
+                .clipped()
+                .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.3), location: 0), .init(color: .clear, location: 0.3), .init(color: tint, location: 1)], startPoint: .top, endPoint: .bottom))
+                .visualEffect { content, proxy in
+                    let y = proxy.frame(in: .scrollView(axis: .vertical)).minY
+                    let covered = min(max(-y / (artHeight * 0.8), 0), 1)
+                    return content
+                        .scaleEffect(y > 0 ? 1 + y / artHeight : 1, anchor: .bottom)
+                        .offset(y: y < 0 ? -y : 0)
+                        .blur(radius: covered * 14)
+                        .opacity(1 - covered)
+                }
+        }
     }
 
     private var buttons: some View {
         let inList = title.inLibrary
         return HStack(spacing: 12) {
-            Button { streamsOpen = true } label: {
-                Label("Streams", systemImage: "list.bullet").font(.headline).frame(maxWidth: .infinity, minHeight: 36)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
-            .disabled(details?.videoId == nil && ref.type == "series")
+            PrimaryPill(label: playLabel) { start(details.flatMap(nextVideo)?.id) }
+                .disabled(details?.state != .ready)
             GlassCircle(icon: inList ? "checkmark" : "plus", label: inList ? "Remove from Library" : "Add to Library") {
                 stremio.setInLibrary(!inList)
                 stremio.show(inList ? "Removed from your Library" : "Added to your Library")
@@ -222,6 +217,9 @@ struct TitleView: View {
                     Link(destination: url) { Label("Trailer", systemImage: "film") }
                 }
                 Button { reviewsOpen = true } label: { Label("Reviews", systemImage: "star") }
+                if details?.videoId != nil {
+                    Button { streamsOpen = true } label: { Label("Choose a Stream", systemImage: "list.bullet") }
+                }
                 if let pick = current?.picked {
                     Button { play(pick, in: .otherApp) } label: { Label("Play with External Player", systemImage: "arrow.up.forward.app") }
                 }
@@ -231,7 +229,7 @@ struct TitleView: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
         }
-        .frame(maxWidth: 360)
+        .frame(maxWidth: 400)
     }
 
     private var facts: some View {
@@ -265,7 +263,7 @@ struct TitleView: View {
     // MARK: - Episodes
 
     @ViewBuilder
-    private func episodes(width: CGFloat, vertical: Bool) -> some View {
+    private func episodes(width: CGFloat) -> some View {
         if let d = details, !d.videos.isEmpty {
             let shown = d.videos.filter { $0.season == (season ?? d.seasons.first) }
             VStack(alignment: .leading, spacing: 14) {
@@ -282,23 +280,21 @@ struct TitleView: View {
                     .foregroundStyle(.white)
                 }
                 .padding(.horizontal, Dx.gutter)
-                if vertical {
-                    LazyVStack(spacing: 14) {
-                        ForEach(shown) { v in episodeButton(v, width: width - Dx.gutter * 2, d: d) }
-                    }
-                    .padding(.horizontal, Dx.gutter)
-                } else {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal) {
-                            LazyHStack(spacing: 14) {
-                                ForEach(shown) { v in episodeButton(v, width: min(width * 0.72, 340), d: d).id(v.id) }
-                            }
-                            .scrollTargetLayout()
-                            .padding(.horizontal, Dx.gutter)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        LazyHStack(spacing: 14) {
+                            ForEach(shown) { v in episodeButton(v, width: min(width * 0.72, 340), d: d).id(v.id) }
                         }
-                        .scrollTargetBehavior(.viewAligned)
-                        .scrollIndicators(.hidden)
-                        .onAppear { if let v = nextVideo(d) { proxy.scrollTo(v.id, anchor: .leading) } }
+                        .scrollTargetLayout()
+                        .padding(.horizontal, Dx.gutter)
+                    }
+                    .scrollTargetBehavior(.viewAligned)
+                    .scrollIndicators(.hidden)
+                    // the episode they're on, in view (once the episodes are there, and again on its season)
+                    .task(id: "\(shown.count)-\(season ?? -1)") {
+                        guard let v = nextVideo(d), shown.contains(where: { $0.id == v.id }) else { return }
+                        try? await Task.sleep(for: .milliseconds(250))
+                        withAnimation(.smooth) { proxy.scrollTo(v.id, anchor: .leading) }
                     }
                 }
             }
@@ -324,13 +320,17 @@ struct TitleView: View {
 
     @ViewBuilder
     private var extras: some View {
-        if let d = details, !(d.cast.isEmpty && d.directors.isEmpty) {
+        if let d = details, !(d.cast.isEmpty && d.directors.isEmpty) || cast?.isEmpty == false {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: "Cast & Crew")
                 ScrollView(.horizontal) {
-                    HStack(spacing: 10) {
-                        ForEach(d.directors.prefix(3), id: \.self) { person(name: $0, role: "Director") }
-                        ForEach(d.cast.prefix(15), id: \.self) { person(name: $0, role: nil) }
+                    HStack(alignment: .top, spacing: 10) {
+                        if let cast, !cast.isEmpty {
+                            ForEach(Array(cast.enumerated()), id: \.offset) { _, p in person(name: p.string("name"), role: p.text("role"), photo: p.text("photo")) }
+                        } else if let d = details {
+                            ForEach(d.directors.prefix(3), id: \.self) { person(name: $0, role: "Director", photo: nil) }
+                            ForEach(d.cast.prefix(15), id: \.self) { person(name: $0, role: nil, photo: nil) }
+                        }
                     }
                     .padding(.horizontal, Dx.gutter)
                 }
@@ -339,15 +339,27 @@ struct TitleView: View {
         }
     }
 
-    private func person(name: String, role: String?) -> some View {
-        VStack(spacing: 6) {
-            Text(name.split(separator: " ").compactMap(\.first).prefix(2).map(String.init).joined())
-                .font(.title2.weight(.semibold))
+    /** Someone in it: tapping them searches for them, as on the desktop */
+    private func person(name: String, role: String?, photo: String?) -> some View {
+        Button { stremio.searchFor(name) } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Text(name.split(separator: " ").compactMap(\.first).prefix(2).map(String.init).joined())
+                        .font(.title2.weight(.semibold))
+                    if let photo, let url = URL(string: photo) {
+                        AsyncImage(url: url) { phase in
+                            if let image = phase.image { image.resizable().scaledToFill() }
+                        }
+                    }
+                }
                 .frame(width: 76, height: 76)
+                .clipShape(.circle)
                 .glassEffect(.regular, in: .circle)
-            Text(name).font(.footnote).lineLimit(2).multilineTextAlignment(.center)
-            if let role { Text(role).font(.caption).foregroundStyle(Dx.muted) }
+                Text(name).font(.footnote).lineLimit(2).multilineTextAlignment(.center)
+                if let role, !role.isEmpty { Text(role).font(.caption).foregroundStyle(Dx.muted).lineLimit(2).multilineTextAlignment(.center) }
+            }
+            .frame(width: 92)
         }
-        .frame(width: 92)
+        .buttonStyle(.plain)
     }
 }

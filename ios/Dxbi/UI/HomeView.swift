@@ -73,10 +73,16 @@ struct HomeView: View {
                     .accessibilityLabel("Watch party")
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            // The picture is the button, a perfect circle (not inside the bar's glass capsule)
             ToolbarItem(placement: .topBarTrailing) {
-                Button { account = true } label: { Avatar(email: stremio.account?.email) }
-                    .accessibilityLabel("Profile and settings")
+                Button { account = true } label: {
+                    Avatar(email: stremio.account?.email, size: 44)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile and settings")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .sheet(isPresented: $account) { AccountView() }
         .sheet(isPresented: $party) { PartyView() }
@@ -194,48 +200,73 @@ private struct ContinueTile: View {
     }
 }
 
-/** The tall billboard at the top of Home */
+/**
+ * The tall billboard at the top of Home: one title at a time, fading into the next (by itself every
+ * few seconds, or with a swipe; either way the wait starts again). Tapping it opens the title; Play plays.
+ */
 private struct Billboard: View {
     @Environment(Stremio.self) private var stremio
     var titles: [Title]
     var height: CGFloat
-    @State private var page: Title.ID?
+    @State private var index = 0
+    @State private var drag: CGFloat = 0
+
+    private var current: Title { titles[min(index, titles.count - 1)] }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: 0) {
-                ForEach(titles) { title in
-                    slide(title).containerRelativeFrame(.horizontal).id(title.id)
+        ZStack(alignment: .bottom) {
+            ZStack {
+                ForEach(Array(titles.enumerated()), id: \.element.id) { i, title in
+                    if i == index { picture(title).transition(.opacity.combined(with: .scale(scale: 1.04))) }
                 }
             }
-            .scrollTargetLayout()
+            info(current)
+                .id(current.id)
+                .transition(.opacity)
+            dots.padding(.bottom, 4)
         }
-        .scrollTargetBehavior(.paging)
-        .scrollIndicators(.hidden)
-        .scrollPosition(id: $page)
         .frame(height: height)
-        .overlay(alignment: .bottom) { dots.padding(.bottom, 4) }
-        .task(id: titles.map(\.id)) {
-            // turns by itself, like Apple TV's
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(9))
-                guard titles.count > 1 else { continue }
-                let at = titles.firstIndex { $0.id == page } ?? 0
-                withAnimation(.smooth(duration: 0.6)) { page = titles[(at + 1) % titles.count].id }
-            }
+        .clipped()
+        .offset(x: drag * 0.15)
+        .contentShape(.rect)
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onChanged { v in if abs(v.translation.width) > abs(v.translation.height) { drag = v.translation.width } }
+                .onEnded { v in
+                    let swipe = v.translation.width
+                    withAnimation(.snappy) { drag = 0 }
+                    guard abs(swipe) > 50, abs(swipe) > abs(v.translation.height) else { return }
+                    go(swipe < 0 ? index + 1 : index - 1)
+                }
+        )
+        // turns by itself; any change (a swipe too) starts the wait again
+        .task(id: "\(index)-\(titles.count)") {
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled && titles.count > 1 { go(index + 1) }
         }
     }
 
-    private func slide(_ title: Title) -> some View {
-        ZStack(alignment: .bottom) {
-            // (the picture fills its own slide and no more: it spilled onto the next while swiping)
+    private func go(_ i: Int) {
+        guard !titles.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.7)) { index = (i + titles.count) % titles.count }
+    }
+
+    private func picture(_ title: Title) -> some View {
+        NavigationLink(value: Route.title(title.ref)) {
             Color.clear
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
                 .overlay { Art(url: title.backdrop) }
                 .clipped()
                 .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.25), .init(color: .clear, location: 0.45), .init(color: .black, location: 0.92)], startPoint: .top, endPoint: .bottom))
-            VStack(spacing: 12) {
+        }
+        .buttonStyle(.plain)
+        .zoomSource(title.id)
+    }
+
+    private func info(_ title: Title) -> some View {
+        VStack(spacing: 12) {
+            Group {
                 if let year = title.year { Badge(text: year) }
                 TitleLogo(title: title, maxHeight: 110, textSize: 40)
                     .frame(maxWidth: 320)
@@ -245,46 +276,46 @@ private struct Billboard: View {
                 if let d = title.description {
                     Text(d).font(.footnote).foregroundStyle(Dx.faint).lineLimit(2).multilineTextAlignment(.center).frame(maxWidth: 360)
                 }
-                HStack(spacing: 14) {
-                    NavigationLink(value: Route.title(TitleRef(type: title.type, id: title.id, name: title.name, play: true))) {
-                        Label("Play", systemImage: "play.fill").font(.headline).frame(width: 150, height: 50)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(.white)
-                    .foregroundStyle(.black)
-                    NavigationLink(value: Route.title(title.ref)) {
-                        Image(systemName: title.inLibrary ? "checkmark" : "plus").font(.title3.weight(.semibold)).frame(width: 36, height: 50)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .accessibilityLabel("Details")
-                }
-                .padding(.top, 4)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 34)
+            // (the words open the title too)
+            .allowsHitTesting(false)
+            HStack(spacing: 14) {
+                NavigationLink(value: Route.title(TitleRef(type: title.type, id: title.id, name: title.name, play: true))) {
+                    Label("Play", systemImage: "play.fill").font(.headline).frame(width: 150, height: 50)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.white)
+                .foregroundStyle(.black)
+                GlassCircle(icon: title.inLibrary ? "checkmark" : "plus", label: title.inLibrary ? "In your Library" : "Add to Library") {
+                    stremio.setInLibrary(title, !title.inLibrary)
+                    stremio.show(title.inLibrary ? "Removed from your Library" : "Added to your Library")
+                }
+            }
+            .padding(.top, 4)
         }
-        .contentShape(.rect)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 34)
     }
 
     private var dots: some View {
-        let at = titles.firstIndex { $0.id == page } ?? 0
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             ForEach(titles.indices, id: \.self) { i in
-                Capsule().fill(i == at ? .white : .white.opacity(0.4)).frame(width: i == at ? 22 : 7, height: 7)
+                Capsule().fill(i == index ? .white : .white.opacity(0.4)).frame(width: i == index ? 22 : 7, height: 7)
             }
         }
-        .animation(.snappy, value: at)
+        .animation(.snappy, value: index)
     }
 }
 
 /** The signed-in person: their Stremio picture, or their initial */
 struct Avatar: View {
     var email: String?
+    var size: CGFloat = 30
     var body: some View {
         Text(String((email ?? "?").prefix(1)).uppercased())
-            .font(.headline)
-            .frame(width: 30, height: 30)
+            .font(.system(size: size * 0.45, weight: .semibold))
+            .frame(width: size, height: size)
             .background(LinearGradient(colors: [Color(red: 0.35, green: 0.6, blue: 0.75), Color(red: 0.2, green: 0.4, blue: 0.55)], startPoint: .top, endPoint: .bottom), in: .circle)
+            .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
     }
 }

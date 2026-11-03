@@ -226,6 +226,20 @@ final class Stremio {
         }
     }
 
+    /** Adds a title that isn't open (Home's +): Stremio wants the whole title, so it's opened first */
+    func setInLibrary(_ title: Title, _ add: Bool) {
+        open(title.type, title.id)
+        Task {
+            for _ in 0..<40 where !(details?.metaId == title.id && details?.state == .ready) {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            guard details?.metaId == title.id else { return show("Couldn't reach Stremio. Try again.") }
+            await ask("library", ["add": add])
+            if let i = billboard.firstIndex(where: { $0.id == title.id }) { billboard[i].inLibrary = add }
+            refreshExtras()
+        }
+    }
+
     func setWatched(_ watched: Bool) { Task { await ask("watched", ["value": watched]) } }
 
     func removeFromContinue(_ id: String) { Task { await ask("dismiss", ["id": id]) } }
@@ -438,6 +452,16 @@ final class Stremio {
         playback.finish(ended: false)
         UIApplication.shared.open(url)
     }
+
+    /** The cast with their photos (TMDB, with a key in dx.bi settings), or nil */
+    func cast(_ type: String, _ imdb: String) async -> [JSON]? {
+        (await ask("dx", ["method": "phone.cast", "args": [type, imdb]], timeout: 25) as? [Any])?.compactMap { $0 as? JSON }
+    }
+
+    /** Search for this (a name tapped on a title's page): the Search tab opens with it */
+    var pendingSearch: String?
+
+    func searchFor(_ text: String) { pendingSearch = text }
 
     /** Your stats (dx.bi's Watch stats), or nil when they're switched off */
     func stats() async -> JSON? { await dx("phone.stats") as? JSON }

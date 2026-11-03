@@ -98,6 +98,7 @@ final class Playback: Identifiable {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
         UIApplication.shared.isIdleTimerDisabled = true
+        UIApplication.shared.beginReceivingRemoteControlEvents()
         mpv.onChange = { [weak self] in self?.update() }
         mpv.onLoaded = { [weak self] in self?.loaded() }
         mpv.onEnd = { [weak self] ended, error in
@@ -122,11 +123,12 @@ final class Playback: Identifiable {
     }
 
     private func update() {
-        position = mpv.position
-        duration = mpv.duration
-        paused = mpv.paused
-        buffering = mpv.buffering
-        speed = mpv.speed
+        // (only what changed: each change redraws what shows it, open menus included)
+        if position != mpv.position { position = mpv.position }
+        if duration != mpv.duration { duration = mpv.duration }
+        if paused != mpv.paused { paused = mpv.paused; nowPlaying() }
+        if buffering != mpv.buffering { buffering = mpv.buffering }
+        if speed != mpv.speed { speed = mpv.speed; nowPlaying() }
         if tracks != mpv.tracks { tracks = mpv.tracks }
         pip.refresh()
         autoSkipIfDue()
@@ -224,9 +226,14 @@ final class Playback: Identifiable {
         guard let url = URL(string: payload.text("poster") ?? payload.string("background")) else { return }
         Task {
             guard let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return }
-            artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            artwork = Self.artwork(image)
             nowPlaying()
         }
+    }
+
+    /** (iOS asks for the picture from its own thread: the closure mustn't belong to the main one) */
+    nonisolated private static func artwork(_ image: UIImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
     }
 
     private func remoteCommands() {
@@ -265,7 +272,7 @@ final class Playback: Identifiable {
         closing = true
         timer?.invalidate()
         let at = position, length = duration
-        pip.stop()
+        pip.end()
         mpv.quit()
         UIApplication.shared.isIdleTimerDisabled = false
         clearRemoteCommands()

@@ -47,7 +47,9 @@ final class Page: NSObject {
     override init() {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
+        // Nothing in the page plays by itself (its own player, sounds): it would take over the lock
+        // screen's Now Playing and play sound nobody asked for. The app's player does the playing
+        config.mediaTypesRequiringUserActionForPlayback = .all
         config.websiteDataStore = .default()
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 800), configuration: config)
         super.init()

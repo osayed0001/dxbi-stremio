@@ -60,7 +60,8 @@ final class MPV {
         set("hwdec", "videotoolbox")
         set("hwdec-software-fallback", "yes")
         set("video-rotate", "no")
-        set("keep-open", "yes")
+        // (the end of a file is reported as its end, for Up Next)
+        set("keep-open", "no")
         set("idle", "yes")
         set("subs-fallback", "yes")
         set("cache", "yes")
@@ -89,7 +90,9 @@ final class MPV {
         guard let mpv = handle else { return }
         handle = nil
         mpv_set_wakeup_callback(mpv, nil, nil)
-        queue.async { mpv_terminate_destroy(mpv) }
+        // (after anything still on its way to it)
+        control.async { mpv_terminate_destroy(mpv) }
+        layer.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil)
     }
 
     // MARK: - Setting up
@@ -105,17 +108,26 @@ final class MPV {
         mpv_set_option(handle, name, MPV_FORMAT_INT64, &pointer)
     }
 
+    // Everything asked of mpv goes through its own queue: mpv can take a moment to answer (opening a
+    // stream, fetching a subtitle file), and waiting on the main thread held up the whole screen
+    private let control = DispatchQueue(label: "dxbi.mpv.control", qos: .userInitiated)
+
     func property(_ name: String, _ value: String) {
-        guard let handle else { return }
-        mpv_set_property_string(handle, name, value)
+        control.async { [weak self] in
+            guard let handle = self?.handle else { return }
+            mpv_set_property_string(handle, name, value)
+        }
     }
 
-    func command(_ args: [String]) {
-        guard let handle else { return }
-        var cargs: [UnsafePointer<CChar>?] = args.map { UnsafePointer(strdup($0)) }
-        cargs.append(nil)
-        defer { for p in cargs where p != nil { free(UnsafeMutablePointer(mutating: p)) } }
-        mpv_command(handle, &cargs)
+    /** [wait]: false runs it in mpv's background (subtitle downloads), so nothing queues behind it */
+    func command(_ args: [String], wait: Bool = true) {
+        control.async { [weak self] in
+            guard let handle = self?.handle else { return }
+            var cargs: [UnsafePointer<CChar>?] = args.map { UnsafePointer(strdup($0)) }
+            cargs.append(nil)
+            defer { for p in cargs where p != nil { free(UnsafeMutablePointer(mutating: p)) } }
+            if wait { mpv_command(handle, &cargs) } else { mpv_command_async(handle, 0, &cargs) }
+        }
     }
 
     private func string(_ name: String) -> String? {
@@ -136,11 +148,12 @@ final class MPV {
 
     /** A subtitle file, listed but not shown until it's chosen */
     func addSubtitle(_ url: String, title: String, lang: String) {
-        command(["sub-add", url, "auto", title, lang])
+        command(["sub-add", url, "auto", title, lang], wait: false)
     }
 
-    func play() { property("pause", "no") }
-    func pause() { property("pause", "yes") }
+    // (shown at once: the button doesn't wait for mpv to say so)
+    func play() { paused = false; property("pause", "no"); onChange?() }
+    func pause() { paused = true; property("pause", "yes"); onChange?() }
     func toggle() { paused ? play() : pause() }
     func seek(to seconds: Double) { command(["seek", String(format: "%.3f", max(0, seconds)), "absolute+exact"]) }
     func seek(by seconds: Double) { command(["seek", String(format: "%.3f", seconds), "relative+exact"]) }

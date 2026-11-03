@@ -24,8 +24,8 @@ struct DxbiApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    /** The player turns the phone sideways; everything else turns freely */
-    static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
+    /** Upright, apart from the player, which turns the phone sideways */
+    static var orientations: UIInterfaceOrientationMask = .portrait
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         Self.orientations
@@ -98,6 +98,7 @@ struct RootView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .onChange(of: stremio.pendingSearch) { _, q in if q != nil { tab = .search } }
     }
 }
 

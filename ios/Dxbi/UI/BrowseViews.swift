@@ -88,6 +88,13 @@ struct SearchView: View {
         .navigationTitle("Search")
         .searchable(text: $query, prompt: "Films, shows, people")
         .onSubmit(of: .search, run)
+        // a name tapped on a title's page
+        .onChange(of: stremio.pendingSearch, initial: true) { _, q in
+            guard let q else { return }
+            stremio.pendingSearch = nil
+            query = q
+            run()
+        }
         .onChange(of: query) { _, q in if q.isEmpty { searched = "" } }
         .task(id: query) {
             // as they type, after a moment's pause

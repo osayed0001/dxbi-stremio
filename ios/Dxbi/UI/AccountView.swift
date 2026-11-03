@@ -102,7 +102,7 @@ struct AccountView: View {
                         }
                     }
                 } footer: {
-                    Text("dx.bi \(Page.version) · runs Stremio's web app with dx.bi built in. Not affiliated with Stremio.")
+                    Text("dx.bi \(Page.version) · Not affiliated with Stremio.")
                 }
             }
             .navigationTitle("Profile")

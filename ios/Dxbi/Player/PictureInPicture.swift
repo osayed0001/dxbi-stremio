@@ -25,7 +25,14 @@ final class PictureInPicture: NSObject {
     }
 
     func start() { if possible { controller?.startPictureInPicture() } }
-    func stop() { controller?.stopPictureInPicture() }
+
+    /** The player closed: no more picture in picture (iOS kept offering an empty one on leaving the app) */
+    func end() {
+        controller?.canStartPictureInPictureAutomaticallyFromInline = false
+        controller?.stopPictureInPicture()
+        controller?.contentSource = nil
+        controller = nil
+    }
 
     /** Tells the small window that playing, paused or the length changed */
     func refresh() { if active { controller?.invalidatePlaybackState() } }

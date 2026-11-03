@@ -15176,6 +15176,32 @@
           series: x.series,
         };
       },
+      // The cast with their photos, from TMDB (only with a TMDB key in dx.bi settings; else null)
+      async cast(type, imdb) {
+        const token = settings.tmdbKey.trim();
+        if (!token || !/^tt\d+$/.test(imdb || "")) return null;
+        const key = `cast:${type}:${imdb}`;
+        const cached = readCached(key);
+        if (cached !== undefined) return cached;
+        const bearer = token.startsWith("eyJ");
+        const get = (path) => fetch(`https://api.themoviedb.org/3${path}${bearer ? "" : `${path.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(token)}`}`, {
+          headers: bearer ? { authorization: `Bearer ${token}` } : {},
+          signal: AbortSignal.timeout(10000),
+        }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        const kind = type === "movie" ? "movie" : "tv";
+        const found = await get(`/find/${encodeURIComponent(imdb)}?external_source=imdb_id`);
+        const first = found && found[`${kind}_results`] && found[`${kind}_results`][0];
+        if (!first) return null;
+        const credits = await get(`/${kind}/${first.id}/credits`);
+        if (!credits) return null;
+        const photo = (p) => (p ? `https://image.tmdb.org/t/p/w185${p}` : null);
+        const result = [
+          ...(credits.crew || []).filter((c) => c.job === "Director").slice(0, 2).map((c) => ({ name: c.name, role: "Director", photo: photo(c.profile_path) })),
+          ...(credits.cast || []).slice(0, 20).map((c) => ({ name: c.name, role: c.character || "", photo: photo(c.profile_path) })),
+        ];
+        writeCached(key, result);
+        return result;
+      },
       async billboard() {
         if (!settings.billboard) return [];
         const items = hero.items.length ? hero.items : await hero.load();

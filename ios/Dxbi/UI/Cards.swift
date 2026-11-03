@@ -61,6 +61,7 @@ struct ContinueCard: View {
         let title = item.title
         ZStack(alignment: .bottom) {
             Art(url: title.backdrop).frame(width: width, height: width * 0.62)
+            BlurFade(url: title.backdrop, from: 0.55).frame(width: width, height: width * 0.62)
             TitleLogo(title: title, maxHeight: width * 0.2, textSize: 22)
                 .frame(maxWidth: width * 0.7)
                 .frame(maxHeight: .infinity)
@@ -74,7 +75,6 @@ struct ContinueCard: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 44)
-            .background(.ultraThinMaterial)
         }
         .frame(width: width, height: width * 0.62)
         .clipShape(.rect(cornerRadius: 22))
@@ -119,6 +119,8 @@ struct EpisodeCard: View {
         ZStack(alignment: .bottom) {
             Art(url: URL(string: video.thumbnail ?? "") ?? fallbackArt)
                 .frame(width: width, height: width * 0.92)
+            BlurFade(url: URL(string: video.thumbnail ?? "") ?? fallbackArt, from: 0.36)
+                .frame(width: width, height: width * 0.92)
             VStack(alignment: .leading, spacing: 4) {
                 Text(video.episode.map { "EPISODE \($0)" } ?? "SPECIAL")
                     .font(.caption.weight(.semibold))
@@ -146,7 +148,6 @@ struct EpisodeCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.ultraThinMaterial)
         }
         .frame(width: width, height: width * 0.92)
         .clipShape(.rect(cornerRadius: 22))
@@ -158,4 +159,22 @@ struct EpisodeCard: View {
 
 extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
+/**
+ * The bottom of an Apple TV card: the card's own picture, more and more blurred toward the bottom,
+ * coming in from clear (no line where the glass starts), with a little shade for the words on it
+ */
+struct BlurFade: View {
+    var url: URL?
+    /** Where the blur starts, from the top (0…1) */
+    var from: CGFloat
+
+    var body: some View {
+        Art(url: url)
+            .blur(radius: 26, opaque: true)
+            .mask(LinearGradient(stops: [.init(color: .clear, location: from), .init(color: .black, location: min(from + 0.25, 1))], startPoint: .top, endPoint: .bottom))
+            .overlay(LinearGradient(stops: [.init(color: .clear, location: from), .init(color: .black.opacity(0.4), location: 1)], startPoint: .top, endPoint: .bottom))
+            .allowsHitTesting(false)
+    }
 }
