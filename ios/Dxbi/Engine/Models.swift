@@ -35,7 +35,7 @@ struct Title: Identifiable, Hashable {
     init(_ o: JSON) {
         id = o.string("id")
         type = o.string("type")
-        name = o.string("name")
+        name = o.string("name").unescaped
         poster = o.text("poster")
         background = o.text("background")
         logo = o.text("logo")
@@ -44,7 +44,7 @@ struct Title: Identifiable, Hashable {
         runtime = o.text("runtime")
         imdb = o.text("imdb")
         genres = o.strings("genres")
-        description = o.text("description")
+        description = o.text("description")?.unescaped
         inLibrary = o.bool("inLibrary")
         watched = o.bool("watched")
         trailer = o.text("trailer")
@@ -272,8 +272,8 @@ struct Details {
         metaId = selected?.object("metaPath")?.text("id")
         videoId = selected?.object("streamPath")?.text("id")
         title = meta.map(Title.init)
-        cast = meta?.strings("cast") ?? []
-        directors = meta?.strings("directors") ?? []
+        cast = (meta?.strings("cast") ?? []).map(\.unescaped)
+        directors = (meta?.strings("directors") ?? []).map(\.unescaped)
         videos = meta?.objects("videos").map(Video.init) ?? []
         resumeVideoId = resume?.text("videoId")
         resumeMs = resume?.double("timeOffset") ?? 0
@@ -508,5 +508,14 @@ struct HomeLayout {
         guard !order.isEmpty else { return visible }
         let place = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         return visible.sorted { (place[$0.key] ?? order.count + $0.index) < (place[$1.key] ?? order.count + $1.index) }
+    }
+}
+
+extension String {
+    /** HTML's escapes some addons leave in names and descriptions (Jim O&apos;Heir) */
+    var unescaped: String {
+        guard contains("&") else { return self }
+        return replacingOccurrences(of: "&apos;", with: "'").replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&amp;", with: "&")
     }
 }

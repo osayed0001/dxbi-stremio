@@ -215,7 +215,6 @@ final class Playback: Identifiable {
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: paused ? 0 : speed,
-            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
         ]
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -238,6 +237,10 @@ final class Playback: Identifiable {
 
     private func remoteCommands() {
         let center = MPRemoteCommandCenter.shared()
+        for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
+                        center.skipBackwardCommand, center.changePlaybackPositionCommand] {
+            command.isEnabled = true
+        }
         center.playCommand.addTarget { [weak self] _ in self?.mpv.play(); return .success }
         center.pauseCommand.addTarget { [weak self] _ in self?.mpv.pause(); return .success }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in self?.mpv.toggle(); return .success }

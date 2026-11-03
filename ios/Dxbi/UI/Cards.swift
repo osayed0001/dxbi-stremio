@@ -1,9 +1,6 @@
 import SwiftUI
 
-/**
- * A title in a row, as Apple TV draws them: tall art, the title's logo low down over a soft fade, its
- * genre under that, and (Netflix's Top 10) a large number in the corner.
- */
+/** A title in a row: its poster, and (Netflix's Top 10) a large number in the corner */
 struct PosterCard: View {
     var title: Title
     var width: CGFloat = 150
@@ -12,23 +9,12 @@ struct PosterCard: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            // (the poster names the title itself)
             Art(url: title.art)
                 .frame(width: width, height: width * 1.5)
-            LinearGradient(stops: [.init(color: .clear, location: 0.5), .init(color: .black.opacity(0.85), location: 1)], startPoint: .top, endPoint: .bottom)
-            VStack(spacing: 4) {
-                if title.logo != nil {
-                    TitleLogo(title: title, maxHeight: width * 0.3, textSize: 15)
-                        .frame(maxWidth: width * 0.85)
-                }
-                if let genre = title.genres.first {
-                    Text(genre).font(.footnote).foregroundStyle(Dx.muted).lineLimit(1)
-                }
-                if let progress, progress > 0 {
-                    ProgressLine(value: progress, colour: Dx.accent).padding(.horizontal, 10).padding(.top, 2)
-                }
+            if let progress, progress > 0 {
+                ProgressLine(value: progress, colour: Dx.accent).padding(.horizontal, 10).padding(.bottom, 10)
             }
-            .padding(.bottom, 10)
-            .padding(.horizontal, 6)
         }
         .frame(width: width, height: width * 1.5)
         .overlay(alignment: .topLeading) {

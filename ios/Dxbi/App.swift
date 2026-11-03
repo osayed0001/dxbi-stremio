@@ -47,7 +47,6 @@ struct RootView: View {
     @State private var tab = AppTab.home
 
     var body: some View {
-        @Bindable var stremio = stremio
         ZStack {
             // Stremio's page, working underneath (it has to be in the window to keep running)
             PageHost(webView: stremio.page.webView)
@@ -77,8 +76,8 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: stremio.message)
-        .fullScreenCover(item: $stremio.playback) { playback in
-            PlayerScreen(playback: playback)
+        .onChange(of: stremio.playback?.id) {
+            if let playback = stremio.playback { PlayerHost.show(playback, stremio: stremio) } else { PlayerHost.hide() }
         }
     }
 

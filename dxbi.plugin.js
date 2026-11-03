@@ -15176,10 +15176,12 @@
           series: x.series,
         };
       },
-      // The cast with their photos, from TMDB (only with a TMDB key in dx.bi settings; else null)
-      async cast(type, imdb) {
+      // The cast with their photos: TMDB's with a TMDB key in dx.bi settings, else Wikipedia's picture
+      // of each of [names] (the title's cast and directors, as Stremio lists them)
+      async cast(type, imdb, names) {
         const token = settings.tmdbKey.trim();
-        if (!token || !/^tt\d+$/.test(imdb || "")) return null;
+        if (!token) return this.castFromWikipedia(names);
+        if (!/^tt\d+$/.test(imdb || "")) return null;
         const key = `cast:${type}:${imdb}`;
         const cached = readCached(key);
         if (cached !== undefined) return cached;
@@ -15201,6 +15203,26 @@
         ];
         writeCached(key, result);
         return result;
+      },
+      async castFromWikipedia(names) {
+        const list = (Array.isArray(names) ? names : []).slice(0, 16);
+        // (only a page about someone in film or TV: a name can belong to anyone)
+        const screen = /\b(actor|actress|director|filmmaker|comedian|screenwriter|producer|presenter|voice|television|film)\b/i;
+        const photoOf = async (name) => {
+          const key = `person:${name}`;
+          const cached = readCached(key);
+          if (cached !== undefined) return cached;
+          let photo = null;
+          try {
+            const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, "_"))}`, { signal: AbortSignal.timeout(8000) });
+            const j = r.ok ? await r.json() : null;
+            if (j && j.type === "standard" && screen.test(j.description || "") && j.thumbnail && /^https:/.test(j.thumbnail.source)) photo = j.thumbnail.source;
+          } catch (_) { return null; } // offline: try again another time
+          writeCached(key, photo);
+          return photo;
+        };
+        const photos = await Promise.all(list.map((n) => photoOf(String(n.name || n))));
+        return list.map((n, i) => ({ name: String(n.name || n), role: n.role || "", photo: photos[i] }));
       },
       async billboard() {
         if (!settings.billboard) return [];

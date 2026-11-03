@@ -454,8 +454,8 @@ final class Stremio {
     }
 
     /** The cast with their photos (TMDB, with a key in dx.bi settings), or nil */
-    func cast(_ type: String, _ imdb: String) async -> [JSON]? {
-        (await ask("dx", ["method": "phone.cast", "args": [type, imdb]], timeout: 25) as? [Any])?.compactMap { $0 as? JSON }
+    func cast(_ type: String, _ imdb: String, names: [JSON]) async -> [JSON]? {
+        (await ask("dx", ["method": "phone.cast", "args": [type, imdb, names]], timeout: 25) as? [Any])?.compactMap { $0 as? JSON }
     }
 
     /** Search for this (a name tapped on a title's page): the Search tab opens with it */

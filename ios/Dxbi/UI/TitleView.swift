@@ -47,7 +47,14 @@ struct TitleView: View {
             .scrollIndicators(.hidden)
             .ignoresSafeArea(edges: .top)
         }
-        .background(tint.ignoresSafeArea())
+        // the art's colour above, black below (what shows past either end of the page)
+        .background {
+            VStack(spacing: 0) {
+                tint
+                Color.black
+            }
+            .ignoresSafeArea()
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -66,8 +73,10 @@ struct TitleView: View {
             if stremio.details?.metaId != ref.id { stremio.open(ref.type, ref.id) }
             reviews = await stremio.reviews(ref.type, ref.id)
         }
-        .task(id: title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : "")) {
-            if let imdb = title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : nil) { cast = await stremio.cast(ref.type, imdb) }
+        .task(id: "\(title.imdb ?? "")\(details?.cast.count ?? -1)") {
+            guard let d = details, d.state == .ready else { return }
+            let names: [JSON] = d.directors.prefix(3).map { ["name": $0, "role": "Director"] } + d.cast.prefix(13).map { ["name": $0, "role": ""] }
+            cast = await stremio.cast(ref.type, title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : ""), names: names)
         }
         .task(id: title.background ?? title.poster) {
             if let c = await ArtColour.of(title.backdrop) { withAnimation(.easeOut(duration: 0.4)) { tint = c } }

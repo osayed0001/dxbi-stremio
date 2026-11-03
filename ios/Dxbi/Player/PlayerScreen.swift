@@ -38,21 +38,14 @@ struct PlayerScreen: View {
         .persistentSystemOverlays(.hidden)
         .animation(.easeOut(duration: 0.2), value: visible)
         .onReceive(clock) { now = $0 }
-        .onAppear {
-            AppDelegate.orientations = .landscape
-            turn(.landscape)
-            poke()
-        }
-        .onDisappear {
-            AppDelegate.orientations = .portrait
-            turn(.portrait)
-        }
+        // (PlayerHost turns the screen sideways)
+        .onAppear { poke() }
     }
 
-    private func turn(_ mask: UIInterfaceOrientationMask) {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
-        scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+    /** A menu is open: the controls stay until the screen is tapped */
+    private func hold() {
+        visible = true
+        hideTask?.cancel()
     }
 
     /** Shows the controls, and hides them again after a few seconds of playing */
@@ -185,9 +178,6 @@ struct PlayerScreen: View {
                 Text("Ends at \(now.addingTimeInterval((playback.duration - playback.position) / max(playback.speed, 0.1)), format: .dateTime.hour().minute())")
                     .font(.footnote).foregroundStyle(Dx.muted).padding(.top, 12)
             }
-            if AVPictureInPictureController.isPictureInPictureSupported() {
-                GlassCircle(icon: "pip.enter", label: "Picture in Picture", size: 46) { playback.pip.start() }
-            }
             GlassCircle(icon: "lock.open.fill", label: "Lock", size: 46) {
                 locked = true
                 visible = false
@@ -233,9 +223,13 @@ struct PlayerScreen: View {
                 Spacer()
                 // (each menu is its own view: it redraws only when what it shows changes, not with the
                 // clock every second, which made open menus jump and miss taps)
-                SpeedMenu(playback: playback)
-                TracksMenu(playback: playback)
-                MoreMenu(playback: playback)
+                // (opening a menu keeps the controls up until the screen is tapped: they hid, and took
+                // the open menu with them)
+                SpeedMenu(playback: playback, onOpen: hold)
+                TracksMenu(playback: playback, onOpen: hold)
+                Button { stremio.playExternally(playback) } label: { Image(systemName: "arrow.up.forward.app").frame(width: 24, height: 24) }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Play with external player")
                 if playback.nextTitle != nil {
                     Button { playback.playNext() } label: { Label("Next", systemImage: "forward.end.fill").frame(height: 24) }
                         .buttonStyle(.glass)
@@ -520,6 +514,8 @@ private struct Gestures: UIViewRepresentable {
 /** Playback speed */
 private struct SpeedMenu: View {
     let playback: Playback
+    /** The menu opened: the controls stay up while it's open */
+    var onOpen: () -> Void
     var body: some View {
         Menu {
             Picker("Speed", selection: Binding(get: { playback.speed }, set: { playback.mpv.setSpeed($0) })) {
@@ -529,12 +525,14 @@ private struct SpeedMenu: View {
             Label(playback.speed == 1 ? "Speed" : "\(playback.speed.formatted())×", systemImage: "gauge.with.dots.needle.67percent").frame(height: 24)
         }
         .buttonStyle(.glass)
+        .simultaneousGesture(TapGesture().onEnded(onOpen))
     }
 }
 
 /** Subtitles, by where they come from, and the sound tracks */
 private struct TracksMenu: View {
     let playback: Playback
+    var onOpen: () -> Void
     var body: some View {
         Menu {
             let subs = playback.subtitleTracks
@@ -560,41 +558,7 @@ private struct TracksMenu: View {
             Label("Subtitles", systemImage: "captions.bubble.fill").frame(height: 24)
         }
         .buttonStyle(.glass)
-    }
-}
-
-/** ⋯: the picture, the stream's details, the watch party and playing it elsewhere */
-private struct MoreMenu: View {
-    @Environment(Stremio.self) private var stremio
-    let playback: Playback
-    @State private var info: [(String, String)] = []
-
-    var body: some View {
-        Menu {
-            Picker("Picture", selection: Binding(get: { playback.fit }, set: { playback.fit = $0 })) {
-                ForEach(Playback.Fit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            Section("Stream") {
-                ForEach(info, id: \.0) { label, value in Text("\(label): \(value)") }
-            }
-            if let party = playback.party {
-                Section("Watch party · \(party.code)") {
-                    Text(party.people.isEmpty ? "Waiting for friends" : "With " + party.people.joined(separator: ", "))
-                    Button("Leave the Party", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { stremio.leaveParty() }
-                }
-            }
-            Section {
-                Button("Play with External Player", systemImage: "arrow.up.forward.app") { stremio.playExternally(playback) }
-            }
-        } label: {
-            Image(systemName: "ellipsis").frame(width: 24, height: 24)
-        }
-        .buttonStyle(.glass)
-        .accessibilityLabel("More")
-        // read when it's tapped, not as it plays (the menu stays still while open)
-        .simultaneousGesture(TapGesture().onEnded { info = playback.mpv.info() })
-        .onAppear { info = playback.mpv.info() }
+        .simultaneousGesture(TapGesture().onEnded(onOpen))
     }
 }
 

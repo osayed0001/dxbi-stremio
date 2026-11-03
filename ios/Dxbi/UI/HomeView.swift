@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var account = false
     @State private var party = false
     @State private var kind: String?
+    @State private var pastBillboard = false
 
     var body: some View {
         GeometryReader { g in
@@ -59,8 +60,12 @@ struct HomeView: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
-            // the billboard shows through the top bar, as on Apple TV
-            .scrollEdgeEffectHidden(true, for: .top)
+            // the billboard shows through the top bar, as on Apple TV; once it's scrolled away, rows
+            // fade out under the title instead of running into it
+            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > min(g.size.height * 0.74, width * 1.55) - 140 } action: { _, past in
+                pastBillboard = past
+            }
+            .scrollEdgeEffectHidden(!pastBillboard, for: .top)
             .ignoresSafeArea(edges: .top)
         }
         .screenBackground()
@@ -210,6 +215,7 @@ private struct Billboard: View {
     var height: CGFloat
     @State private var index = 0
     @State private var drag: CGFloat = 0
+    @State private var opened: TitleRef?
 
     private var current: Title { titles[min(index, titles.count - 1)] }
 
@@ -229,7 +235,10 @@ private struct Billboard: View {
         .clipped()
         .offset(x: drag * 0.15)
         .contentShape(.rect)
-        .gesture(
+        // a tap opens the title; a swipe only changes the slide (and Home still scrolls up and down)
+        .onTapGesture { opened = current.ref }
+        .navigationDestination(item: $opened) { TitleView(ref: $0) }
+        .simultaneousGesture(
             DragGesture(minimumDistance: 20)
                 .onChanged { v in if abs(v.translation.width) > abs(v.translation.height) { drag = v.translation.width } }
                 .onEnded { v in
@@ -252,16 +261,12 @@ private struct Billboard: View {
     }
 
     private func picture(_ title: Title) -> some View {
-        NavigationLink(value: Route.title(title.ref)) {
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .overlay { Art(url: title.backdrop) }
-                .clipped()
-                .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.25), .init(color: .clear, location: 0.45), .init(color: .black, location: 0.92)], startPoint: .top, endPoint: .bottom))
-        }
-        .buttonStyle(.plain)
-        .zoomSource(title.id)
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .overlay { Art(url: title.backdrop) }
+            .clipped()
+            .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.25), .init(color: .clear, location: 0.45), .init(color: .black, location: 0.92)], startPoint: .top, endPoint: .bottom))
     }
 
     private func info(_ title: Title) -> some View {
