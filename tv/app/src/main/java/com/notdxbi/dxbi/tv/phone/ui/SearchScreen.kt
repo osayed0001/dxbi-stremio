@@ -34,7 +34,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.notdxbi.dxbi.tv.phone.Load
@@ -69,11 +72,9 @@ import com.notdxbi.dxbi.tv.phone.Title
 import kotlinx.coroutines.delay
 
 @Composable
-fun SearchScreen(stremio: Stremio, initial: String, focus: Boolean, onOpen: (Title) -> Unit, onPlay: (Title) -> Unit) {
+fun SearchScreen(stremio: Stremio, initial: String, focus: Boolean, onOpen: (Title) -> Unit) {
     var query by rememberSaveable { mutableStateOf(initial) }
     val results by stremio.search.collectAsState()
-    val billboard by stremio.billboard.collectAsState()
-    val rows by stremio.rows.collectAsState()
     val keyboard = LocalSoftwareKeyboardController.current
     val focuser = remember { FocusRequester() }
 
@@ -108,12 +109,7 @@ fun SearchScreen(stremio: Stremio, initial: String, focus: Boolean, onOpen: (Tit
         }
 
         if (query.trim().length < 2) {
-            // Nothing typed yet: what's popular, as a list to start from
-            val suggestions = (billboard + rows.filter { it.type == "movie" || it.type == "series" }.flatMap { it.items }).distinctBy { it.id }.take(30)
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current)) {
-                item { Text("Recommended", style = MaterialTheme.typography.titleMedium, color = Dx.Text, modifier = Modifier.padding(Gutter, 8.dp)) }
-                items(suggestions, key = { it.id }) { t -> Suggestion(t, onOpen = { onOpen(t) }, onPlay = { onPlay(t) }) }
-            }
+            SearchHints()
         } else {
             // the best of each row first (films, series…), rather than every film before any series
             val found = (0 until (results.maxOfOrNull { it.items.size } ?: 0))
@@ -129,15 +125,23 @@ fun SearchScreen(stremio: Stremio, initial: String, focus: Boolean, onOpen: (Tit
     }
 }
 
+/** Nothing typed yet: what Search finds, as Stremio's desktop app says it */
 @Composable
-private fun Suggestion(t: Title, onOpen: () -> Unit, onPlay: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = Gutter, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Art(t.backdrop, t.name, Modifier.width(140.dp).aspectRatio(16f / 9f), RoundedCornerShape(4.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(t.name, color = Dx.Text, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        IconButton(onClick = onPlay) {
-            Box(Modifier.size(34.dp).clip(CircleShape).background(Color.Transparent), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = Dx.Text)
+private fun SearchHints() {
+    Column(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("You can search anything…", color = Dx.Muted, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(32.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            listOf(
+                Icons.Filled.Movie to "Movies, series & anime",
+                Icons.Filled.Person to "Actors, directors & writers",
+                Icons.Filled.LiveTv to "Channels & TV from your addons",
+            ).forEach { (icon, label) ->
+                Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(icon, contentDescription = null, tint = Dx.Muted, modifier = Modifier.size(40.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(label, color = Dx.Muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
             }
         }
     }

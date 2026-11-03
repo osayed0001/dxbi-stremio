@@ -217,10 +217,17 @@ struct StreamOption: Identifiable, Hashable {
         return size >= 1e9 ? String(format: "%.1f GB", size / 1e9) : String(format: "%.0f MB", size / 1e6)
     }
 
-    /** dx.bi's order of "best": ready to play, then quality, HDR before Dolby Vision, a good source */
-    var rank: Double {
-        let sourceRank: Double = ["BluRay": 3, "WEB": 3, "Remux": 2, "HDTV": 1][source] ?? 0
-        return (instant ? 1e5 : 0) + Double(res * 10) + (dv ? 1 : hdr ? 2 : 0) + sourceRank - (lesser ? 15000 : 0) - (source == "CAM" ? 30000 : 0)
+    /** The picture's quality, as the desktop's Best quality sort scores it: resolution, then Dolby Vision or HDR, then the source */
+    var score: Int {
+        res * 10 + (dv ? 3 : hdr ? 2 : 0) + (["Remux": 4, "BluRay": 3, "WEB": 2, "HDTV": 1, "CAM": -10][source] ?? 0)
+    }
+
+    /** Best quality first; of the same quality, ready to play, then most seeds, then largest */
+    static func best(_ a: StreamOption, _ b: StreamOption) -> Bool {
+        if a.score != b.score { return a.score > b.score }
+        if a.instant != b.instant { return a.instant }
+        if a.seeds != b.seeds { return a.seeds > b.seeds }
+        return a.size > b.size
     }
 }
 

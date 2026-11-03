@@ -14,9 +14,10 @@ settings:
     DEVELOPMENT_TEAM: ""
     TARGETED_DEVICE_FAMILY: "1,2"
 packages:
+  # Streamyfin's build of MPVKit: mpv with an AVFoundation video output, which picture in picture needs
   MPVKit:
-    url: https://github.com/mpvkit/MPVKit.git
-    exactVersion: 1.1.0-n9.0.2
+    url: https://github.com/streamyfin/MPVKit.git
+    exactVersion: 0.41.0-av5
 targets:
   Dxbi:
     type: application
@@ -34,7 +35,7 @@ targets:
         buildPhase: resources
     dependencies:
       - package: MPVKit
-        product: MPVKit
+        product: MPVKit-GPL
     info:
       path: Dxbi/Info.plist
       properties:

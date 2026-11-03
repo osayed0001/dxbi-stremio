@@ -208,7 +208,6 @@ private fun Screens(stremio: Stremio) {
                         initial = e.arguments?.getString("q").orEmpty(),
                         focus = e.arguments?.getBoolean("focus") == true,
                         onOpen = { nav.openTitle(it) },
-                        onPlay = { nav.openTitle(it, play = true) },
                     )
                 }
                 composable(Tab.Addons.route) { AddonsScreen(stremio) }

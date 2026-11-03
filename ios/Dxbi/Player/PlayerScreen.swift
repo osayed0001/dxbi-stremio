@@ -1,4 +1,5 @@
 import AVFoundation
+import AVKit
 import MediaPlayer
 import SwiftUI
 import UIKit
@@ -9,7 +10,11 @@ import UIKit
  * pinch to fill, hold for 2× and slide for faster or slower).
  */
 struct PlayerScreen: View {
+    @Environment(Stremio.self) private var stremio
     let playback: Playback
+
+    private enum Panel { case tracks, more }
+    @State private var panel: Panel?
 
     @State private var visible = true
     @State private var locked = false
@@ -31,10 +36,12 @@ struct PlayerScreen: View {
             if playback.buffering && seekPreview == nil { ProgressView().controlSize(.large).tint(.white).allowsHitTesting(false) }
             if visible && !locked { controls.transition(.opacity) }
             overlays
+            if let panel { side(panel).transition(.move(edge: .trailing).combined(with: .opacity)) }
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .animation(.easeOut(duration: 0.2), value: visible)
+        .animation(.snappy(duration: 0.25), value: panel)
         .onReceive(clock) { now = $0 }
         .onAppear {
             AppDelegate.orientations = .landscape
@@ -45,8 +52,6 @@ struct PlayerScreen: View {
             AppDelegate.orientations = .allButUpsideDown
             turn(.portrait)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in playback.mpv.background(true) }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in playback.mpv.background(false) }
     }
 
     private func turn(_ mask: UIInterfaceOrientationMask) {
@@ -61,7 +66,7 @@ struct PlayerScreen: View {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled && !playback.paused && scrubbing == nil { visible = false }
+            if !Task.isCancelled && !playback.paused && scrubbing == nil && panel == nil { visible = false }
         }
     }
 
@@ -73,6 +78,10 @@ struct PlayerScreen: View {
             if locked {
                 unlockShown = true
                 Task { try? await Task.sleep(for: .seconds(3)); unlockShown = false }
+                return
+            }
+            if panel != nil {
+                panel = nil
                 return
             }
             // the middle pauses; either side shows or hides the controls
@@ -124,11 +133,10 @@ struct PlayerScreen: View {
         }
         h.pinch = { scale in
             guard !locked else { return }
-            let fill = scale > 1
-            guard fill != playback.fill else { return }
-            playback.fill = fill
-            playback.mpv.fill(fill)
-            playback.show(fill ? "Fill screen" : "Fit to screen")
+            let fit: Playback.Fit = scale > 1 ? .fill : .fit
+            guard fit != playback.fit else { return }
+            playback.fit = fit
+            playback.show(fit == .fill ? "Fill screen" : "Fit to screen")
         }
         h.hold = { phase, dx in
             guard !locked else { return }
@@ -186,6 +194,9 @@ struct PlayerScreen: View {
                 Text("Ends at \(now.addingTimeInterval((playback.duration - playback.position) / max(playback.speed, 0.1)), format: .dateTime.hour().minute())")
                     .font(.footnote).foregroundStyle(Dx.muted).padding(.top, 12)
             }
+            if AVPictureInPictureController.isPictureInPictureSupported() {
+                GlassCircle(icon: "pip.enter", label: "Picture in Picture", size: 46) { playback.pip.start() }
+            }
             GlassCircle(icon: "lock.open.fill", label: "Lock", size: 46) {
                 locked = true
                 visible = false
@@ -230,16 +241,11 @@ struct PlayerScreen: View {
                 Text("/ " + time(playback.duration)).monospacedDigit().foregroundStyle(Dx.muted)
                 Spacer()
                 speedMenu
-                tracksMenu
-                Button {
-                    playback.fill.toggle()
-                    playback.mpv.fill(playback.fill)
-                    poke()
-                } label: {
-                    Image(systemName: playback.fill ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right").frame(height: 24)
-                }
-                .buttonStyle(.glass)
-                .accessibilityLabel(playback.fill ? "Fit to screen" : "Fill screen")
+                Button { panel = .tracks } label: { Label("Subtitles", systemImage: "captions.bubble.fill").frame(height: 24) }
+                    .buttonStyle(.glass)
+                Button { panel = .more } label: { Image(systemName: "ellipsis").frame(width: 24, height: 24) }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("More")
                 if playback.nextTitle != nil {
                     Button { playback.playNext() } label: { Label("Next", systemImage: "forward.end.fill").frame(height: 24) }
                         .buttonStyle(.glass)
@@ -261,34 +267,108 @@ struct PlayerScreen: View {
         .menuActionDismissBehavior(.disabled)
     }
 
+    // MARK: - Side panels (they scroll: a long list of subtitles fits)
+
+    private func side(_ which: Panel) -> some View {
+        HStack {
+            Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    switch which {
+                    case .tracks: tracks
+                    case .more: more
+                    }
+                }
+                .padding(18)
+            }
+            .scrollIndicators(.hidden)
+            .frame(width: 380)
+            .frame(maxHeight: .infinity)
+            .glassEffect(.regular, in: .rect(cornerRadius: 28))
+            .padding(.vertical, 12)
+            .padding(.trailing, 12)
+        }
+    }
+
+    private func heading(_ text: String) -> some View {
+        Text(text).font(.footnote.weight(.semibold)).foregroundStyle(Dx.muted).padding(.top, 14).padding(.bottom, 2)
+    }
+
+    private func choice(_ text: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(text).multilineTextAlignment(.leading)
+                Spacer()
+                if on { Image(systemName: "checkmark").fontWeight(.bold) }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(on ? .white.opacity(0.16) : .clear, in: .rect(cornerRadius: 14))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
     /** Sound and subtitles; subtitles by where they come from */
-    private var tracksMenu: some View {
-        Menu {
-            let subs = playback.subtitleTracks
-            Section("Subtitles") {
-                Button { playback.mpv.select("sub", nil) } label: { check("Off", on: !subs.contains(where: \.selected)) }
+    @ViewBuilder
+    private var tracks: some View {
+        let subs = playback.subtitleTracks
+        Text("Subtitles").font(.title3.bold())
+        choice("Off", on: !subs.contains(where: \.selected)) { playback.mpv.select("sub", nil) }
+        ForEach([("video", "In the video"), ("stream", "With this stream"), ("addon", "From subtitle addons · may not match this video")], id: \.0) { source, title in
+            let group = subs.filter { playback.source(of: $0) == source }
+            if !group.isEmpty {
+                heading(title)
+                ForEach(group) { t in choice(trackName(t), on: t.selected) { playback.mpv.select("sub", t.id) } }
             }
-            ForEach([("video", "In the Video"), ("stream", "With This Stream"), ("addon", "From Subtitle Addons · may not match")], id: \.0) { source, heading in
-                let group = subs.filter { playback.source(of: $0) == source }
-                if !group.isEmpty {
-                    Section(heading) {
-                        ForEach(group) { t in
-                            Button { playback.mpv.select("sub", t.id) } label: { check(trackName(t), on: t.selected) }
-                        }
+        }
+        if playback.audioTracks.count > 1 {
+            Text("Audio").font(.title3.bold()).padding(.top, 18)
+            ForEach(playback.audioTracks) { t in
+                choice(trackName(t) + (t.codec.isEmpty ? "" : " · \(t.codec.uppercased())"), on: t.selected) { playback.mpv.select("audio", t.id) }
+            }
+        }
+    }
+
+    /** The picture, the stream's details, the watch party and playing it elsewhere */
+    @ViewBuilder
+    private var more: some View {
+        if let party = playback.party {
+            Text("Watch party · \(party.code)").font(.title3.bold())
+            Text(party.people.isEmpty ? "Waiting for friends" : "With " + party.people.joined(separator: ", ")).font(.subheadline).foregroundStyle(Dx.muted)
+            Button("Leave the Party", role: .destructive) { stremio.leaveParty(); panel = nil }.padding(.vertical, 8)
+        }
+        Text("Picture").font(.title3.bold())
+        HStack(spacing: 8) {
+            ForEach(Playback.Fit.allCases, id: \.self) { f in
+                Button(f.rawValue) { playback.fit = f }
+                    .buttonStyle(.glass)
+                    .tint(playback.fit == f ? .white : nil)
+                    .foregroundStyle(playback.fit == f ? .black : .white)
+            }
+        }
+        .padding(.vertical, 6)
+        Text("Stream").font(.title3.bold()).padding(.top, 14)
+        TimelineView(.periodic(from: .now, by: 2)) { _ in
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(playback.mpv.info(), id: \.0) { label, value in
+                    HStack(alignment: .top) {
+                        Text(label).foregroundStyle(Dx.muted).frame(width: 74, alignment: .leading)
+                        Text(value).textSelection(.enabled)
                     }
+                    .font(.footnote)
                 }
             }
-            if playback.audioTracks.count > 1 {
-                Section("Audio") {
-                    ForEach(playback.audioTracks) { t in
-                        Button { playback.mpv.select("audio", t.id) } label: { check(trackName(t) + (t.codec.isEmpty ? "" : " · \(t.codec.uppercased())"), on: t.selected) }
-                    }
-                }
-            }
+        }
+        .padding(.vertical, 6)
+        Button {
+            panel = nil
+            stremio.playExternally(playback)
         } label: {
-            Label("Subtitles", systemImage: "captions.bubble.fill").frame(height: 24)
+            Label("Play with External Player", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.glass)
+        .padding(.top, 10)
     }
 
     @ViewBuilder

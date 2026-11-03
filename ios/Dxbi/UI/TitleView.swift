@@ -223,7 +223,7 @@ struct TitleView: View {
                 }
                 Button { reviewsOpen = true } label: { Label("Reviews", systemImage: "star") }
                 if let pick = current?.picked {
-                    Button { play(pick, in: .otherApp) } label: { Label("Play in Another App", systemImage: "arrow.up.forward.app") }
+                    Button { play(pick, in: .otherApp) } label: { Label("Play with External Player", systemImage: "arrow.up.forward.app") }
                 }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 20, weight: .semibold)).frame(width: 36, height: 36)

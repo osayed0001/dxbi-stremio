@@ -25,7 +25,7 @@ struct StreamsSheet: View {
     private var shown: [StreamOption] {
         let kept = all.filter { (quality == nil || $0.quality == quality) && (provider == nil || $0.provider == provider) && (!instantOnly || $0.instant) }
         switch sort {
-        case .best: return kept.sorted { $0.rank != $1.rank ? $0.rank > $1.rank : $0.seeds > $1.seeds }
+        case .best: return kept.sorted(by: StreamOption.best)
         case .seeds: return kept.sorted { $0.seeds > $1.seeds }
         case .largest: return kept.sorted { $0.size > $1.size }
         case .smallest: return kept.sorted { ($0.size > 0 ? $0.size : .infinity) < ($1.size > 0 ? $1.size : .infinity) }
@@ -152,7 +152,7 @@ struct StreamsSheet: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button { onPlay(s, .player) } label: { Label("Play", systemImage: "play.fill") }
-            Button { onPlay(s, .otherApp) } label: { Label("Play in Another App", systemImage: "arrow.up.forward.app") }
+            Button { onPlay(s, .otherApp) } label: { Label("Play with External Player", systemImage: "arrow.up.forward.app") }
             if !s.filename.isEmpty { Button { UIPasteboard.general.string = s.filename } label: { Label("Copy File Name", systemImage: "doc.on.doc") } }
         }
     }

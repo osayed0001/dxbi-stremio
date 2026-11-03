@@ -499,7 +499,7 @@ class PhoneControls(
                 ChoiceRow(Choice(mode.label, sound.mode === mode) { sound.mode = mode; now = System.currentTimeMillis() }) }
             item { Heading("Stream") }
             item { Text(stats(), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) }
-            item { ChoiceRow(Choice("Play in another app", false) { onExternal() }) }
+            item { ChoiceRow(Choice("Play with external player", false) { onExternal() }) }
         }
     }
 

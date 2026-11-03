@@ -84,6 +84,7 @@ struct AccountView: View {
                 }
                 Section {
                     NavigationLink { AddonsView() } label: { Label("Addons", systemImage: "puzzlepiece.extension.fill") }
+                    NavigationLink { StatsView() } label: { Label("Your Stats", systemImage: "chart.bar.fill") }
                     NavigationLink { CustomiseHomeView() } label: { Label("Customise Home", systemImage: "square.stack.3d.up.fill") }
                     NavigationLink { DxbiSettingsView() } label: { Label("dx.bi Settings", systemImage: "slider.horizontal.3") }
                     NavigationLink { PlaybackSettingsView() } label: { Label("Playback", systemImage: "play.rectangle.fill") }
@@ -243,6 +244,7 @@ private struct SettingRow: View {
             switch setting.type {
             case "toggle":
                 Toggle(setting.label, isOn: Binding(get: { setting.isOn }, set: { onChange($0 ? "true" : "false") }))
+                    .tint(Dx.accent)
             case "select":
                 Picker(setting.label, selection: Binding(get: { setting.value }, set: { onChange($0) })) {
                     ForEach(setting.options, id: \.value) { Text($0.label).tag($0.value) }
@@ -338,6 +340,7 @@ struct CustomiseHomeView: View {
                     }
                 }
                 .onMove { from, to in keys.move(fromOffsets: from, toOffset: to); save() }
+                .tint(Dx.accent)
             } footer: {
                 Text("Drag to reorder. dx.bi saves this to your profile, so your other devices follow it.")
             }

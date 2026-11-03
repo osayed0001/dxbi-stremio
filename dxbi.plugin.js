@@ -10744,6 +10744,55 @@
       return s;
     },
 
+    // What Your stats shows (the panel here, and the phone app's own screen)
+    summary() {
+      if (!this.data) this.load();
+      const d = this.data;
+      const now = new Date();
+      const year = String(now.getFullYear());
+      const today = dayKey(now);
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      const tiles = [
+        ["Today", this.sumDays(today, today)],
+        ["This week", this.sumDays(dayKey(weekStart), today)],
+        ["This month", this.sumDays(`${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`, today)],
+        [year, this.sumDays(`${year}-01-01`, today)],
+      ];
+      // last 30 days
+      const bars = [];
+      for (let i = 29; i >= 0; i--) {
+        const day = new Date(now);
+        day.setDate(now.getDate() - i);
+        bars.push({ day, sec: d.days[dayKey(day)] || 0 });
+      }
+      const top = Object.entries(d.titles).map(([id, t]) => ({ id, ...t, ys: (t.y && t.y[year]) || 0 })).filter((t) => t.ys > 0).sort((a, b) => b.ys - a.ys).slice(0, 6);
+      const genres = Object.entries(d.genres).map(([g, y]) => [g, y[year] || 0]).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const hourPeak = Object.entries(d.hours).sort((a, b) => b[1] - a[1])[0];
+      const weekday = {};
+      for (const [k, v] of Object.entries(d.days)) {
+        if (!k.startsWith(year)) continue;
+        const wd = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "long" });
+        weekday[wd] = (weekday[wd] || 0) + v;
+      }
+      const dayPeak = Object.entries(weekday).sort((a, b) => b[1] - a[1])[0];
+      const watched = stremioLibrary().filter((i) => i.state.lastWatched);
+      return {
+        year, tiles, streak: this.streaks(), bars, top, genres, hourPeak, dayPeak,
+        movies: watched.filter((i) => i.type === "movie").length,
+        series: watched.filter((i) => i.type === "series").length,
+        total: Object.values(d.days).reduce((s, v) => s + v, 0),
+      };
+    },
+
+    // Time watched in the app's own player (on a TV or phone the page's video isn't the one playing)
+    played(sec) {
+      if (!settings.watchStats || !(sec > 0)) return;
+      if (!this.data) this.load();
+      if (this.mediaHash !== location.hash) this.loadMedia();
+      this.add(sec);
+    },
+
     streaks() {
       const days = new Set(Object.keys(this.data.days).filter((k) => this.data.days[k] >= 60));
       let best = 0;
@@ -10856,50 +10905,13 @@
     },
 
     html() {
-      const d = stats.data;
-      const now = new Date();
-      const year = String(now.getFullYear());
-      const today = dayKey(now);
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      const tiles = [
-        ["Today", stats.sumDays(today, today)],
-        ["This week", stats.sumDays(dayKey(weekStart), today)],
-        ["This month", stats.sumDays(`${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`, today)],
-        [year, stats.sumDays(`${year}-01-01`, today)],
-      ];
-      const streak = stats.streaks();
-
-      // last 30 days
-      const bars = [];
+      const { year, tiles, streak, bars, top, genres, hourPeak, dayPeak, movies, series, total } = stats.summary();
       let peak = 1;
-      for (let i = 29; i >= 0; i--) {
-        const day = new Date(now);
-        day.setDate(now.getDate() - i);
-        const sec = d.days[dayKey(day)] || 0;
-        peak = Math.max(peak, sec);
-        bars.push({ day, sec });
-      }
+      for (const b of bars) peak = Math.max(peak, b.sec);
       const barsHtml = bars.map((b) => `<i style="height:${Math.max(3, Math.round((b.sec / peak) * 100))}%" title="${b.day.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}: ${hoursText(b.sec)}"${b.sec ? "" : ' class="is-zero"'}></i>`).join("");
-
-      const top = Object.entries(d.titles).map(([id, t]) => ({ id, ...t, ys: (t.y && t.y[year]) || 0 })).filter((t) => t.ys > 0).sort((a, b) => b.ys - a.ys).slice(0, 6);
-      const genres = Object.entries(d.genres).map(([g, y]) => [g, y[year] || 0]).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
       const genreTotal = genres.reduce((s, [, v]) => s + v, 0) || 1;
-      const hourPeak = Object.entries(d.hours).sort((a, b) => b[1] - a[1])[0];
-      const weekday = {};
-      for (const [k, v] of Object.entries(d.days)) {
-        if (!k.startsWith(year)) continue;
-        const wd = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "long" });
-        weekday[wd] = (weekday[wd] || 0) + v;
-      }
-      const dayPeak = Object.entries(weekday).sort((a, b) => b[1] - a[1])[0];
-      const lib = stremioLibrary();
-      const watched = lib.filter((i) => i.state.lastWatched);
-      const movies = watched.filter((i) => i.type === "movie").length;
-      const series = watched.filter((i) => i.type === "series").length;
       const viewer = viewers.current();
-      const total = Object.values(d.days).reduce((s, v) => s + v, 0);
-      const since = new Date(d.since || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+      const since = new Date(stats.data.since || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 
       return `
         <div class="dxe-head">
@@ -15139,9 +15151,31 @@
     episodes,
     calendarFill,
     report,
+    // the app's own player: seconds just spent watching (Watch stats)
+    statsPlayed: (sec) => stats.played(sec),
     // dx.bi's phone app: what Home's own rows show, as data for its native screens (read only; the
     // page's rows above are built from the same things)
     phone: {
+      // Your stats, for the app's own screen (null when Watch stats is off)
+      stats() {
+        if (!settings.watchStats) return null;
+        stats.flush();
+        const x = stats.summary();
+        return {
+          year: x.year,
+          since: stats.data.since || Date.now(),
+          total: x.total,
+          tiles: x.tiles.map(([label, sec]) => ({ label: String(label), sec })),
+          streak: x.streak,
+          days: x.bars.map((b) => ({ day: dayKey(b.day), sec: b.sec })),
+          top: x.top.map((t) => ({ id: t.id, name: t.n || "Untitled", type: t.type, poster: t.p && /^https:/.test(t.p) ? t.p : null, sec: t.ys })),
+          genres: x.genres.map(([name, sec]) => ({ name, sec })),
+          hour: x.hourPeak ? Number(x.hourPeak[0]) : null,
+          day: x.dayPeak ? x.dayPeak[0] : null,
+          movies: x.movies,
+          series: x.series,
+        };
+      },
       async billboard() {
         if (!settings.billboard) return [];
         const items = hero.items.length ? hero.items : await hero.load();

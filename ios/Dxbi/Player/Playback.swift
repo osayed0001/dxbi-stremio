@@ -27,9 +27,16 @@ final class Playback: Identifiable {
         var source: String
     }
 
+    /** How the picture fits the screen */
+    enum Fit: String, CaseIterable {
+        case fit = "Fit", fill = "Fill", stretch = "Stretch"
+        var gravity: AVLayerVideoGravity { self == .fit ? .resizeAspect : self == .fill ? .resizeAspectFill : .resize }
+    }
+
     let id = UUID()
     let payload: JSON
-    let mpv = MPV()
+    let mpv: MPV
+    @ObservationIgnored let pip: PictureInPicture
     @ObservationIgnored private weak var stremio: Stremio?
 
     let title: String
@@ -49,7 +56,9 @@ final class Playback: Identifiable {
     var buffering = true
     var speed: Double = 1
     var tracks: [MPV.Track] = []
-    var fill = false
+    var fit = Fit.fit {
+        didSet { mpv.gravity(fit.gravity) }
+    }
     var party: (code: String, people: [String])?
     var flash: String?
 
@@ -57,6 +66,7 @@ final class Playback: Identifiable {
     @ObservationIgnored private var lastReport: Date = .distantPast
     @ObservationIgnored private var skipped: Set<String> = []
     @ObservationIgnored private var closing = false
+    @ObservationIgnored private var artwork: MPMediaItemArtwork?
 
     init(payload: JSON, stremio: Stremio) {
         self.payload = payload
@@ -78,6 +88,9 @@ final class Playback: Identifiable {
             guard let url = s.text("url") else { return nil }
             return Subtitle(url: url, label: s.text("label") ?? s.string("lang"), lang: s.string("lang"), source: s.text("source") ?? "addon")
         }
+        let player = MPV()
+        mpv = player
+        pip = PictureInPicture(mpv: player)
         start()
     }
 
@@ -94,11 +107,14 @@ final class Playback: Identifiable {
         }
         let headers = (payload.object("headers") ?? [:]).compactMapValues { $0 as? String }
         if let size = payload.object("subtitleStyle")?.double("size"), size > 0 { mpv.subtitleScale(size / 100) }
+        mpv.gravity(fit.gravity)
         mpv.load(payload.string("url"), start: payload.double("startMs") / 1000, headers: headers, audioLanguage: payload.text("audioLanguage"))
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        remoteCommands()
         nowPlaying()
+        loadArtwork()
     }
 
     private func loaded() {
@@ -112,6 +128,7 @@ final class Playback: Identifiable {
         buffering = mpv.buffering
         speed = mpv.speed
         if tracks != mpv.tracks { tracks = mpv.tracks }
+        pip.refresh()
         autoSkipIfDue()
     }
 
@@ -190,27 +207,55 @@ final class Playback: Identifiable {
     // MARK: - Lock screen and Control Centre
 
     private func nowPlaying() {
-        let info: [String: Any] = [
-            MPMediaItemPropertyTitle: title,
-            MPMediaItemPropertyArtist: subtitle,
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: subtitle.isEmpty ? title : subtitle,
+            MPMediaItemPropertyArtist: subtitle.isEmpty ? "" : title,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: paused ? 0 : speed,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
         ]
+        if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /** The title's poster, for the lock screen and Control Centre */
+    private func loadArtwork() {
+        guard let url = URL(string: payload.text("poster") ?? payload.string("background")) else { return }
+        Task {
+            guard let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return }
+            artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            nowPlaying()
+        }
+    }
+
+    private func remoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-        guard center.playCommand.isEnabled == false || timer != nil else { return }
-        center.playCommand.removeTarget(nil)
-        center.pauseCommand.removeTarget(nil)
-        center.togglePlayPauseCommand.removeTarget(nil)
-        center.changePlaybackPositionCommand.removeTarget(nil)
         center.playCommand.addTarget { [weak self] _ in self?.mpv.play(); return .success }
         center.pauseCommand.addTarget { [weak self] _ in self?.mpv.pause(); return .success }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in self?.mpv.toggle(); return .success }
+        center.skipForwardCommand.preferredIntervals = [10]
+        center.skipBackwardCommand.preferredIntervals = [10]
+        center.skipForwardCommand.addTarget { [weak self] e in self?.mpv.seek(by: (e as? MPSkipIntervalCommandEvent)?.interval ?? 10); return .success }
+        center.skipBackwardCommand.addTarget { [weak self] e in self?.mpv.seek(by: -((e as? MPSkipIntervalCommandEvent)?.interval ?? 10)); return .success }
         center.changePlaybackPositionCommand.addTarget { [weak self] e in
             if let e = e as? MPChangePlaybackPositionCommandEvent { self?.mpv.seek(to: e.positionTime) }
             return .success
         }
+        if nextTitle != nil {
+            center.nextTrackCommand.isEnabled = true
+            center.nextTrackCommand.addTarget { [weak self] _ in self?.playNext(); return .success }
+        }
+    }
+
+    private func clearRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
+                        center.skipBackwardCommand, center.changePlaybackPositionCommand, center.nextTrackCommand] {
+            command.removeTarget(nil)
+        }
+        center.nextTrackCommand.isEnabled = false
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: - Closing
@@ -220,9 +265,11 @@ final class Playback: Identifiable {
         closing = true
         timer?.invalidate()
         let at = position, length = duration
+        pip.stop()
         mpv.quit()
         UIApplication.shared.isIdleTimerDisabled = false
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        clearRemoteCommands()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         stremio?.closed(position: at, duration: length, ended: ended, error: error, next: next)
     }
 }

@@ -169,12 +169,15 @@ data class StreamOption(
     val quality: String get() = when (res) { 2160 -> "4K"; 1440 -> "1440p"; 1080 -> "1080p"; 720 -> "720p"; 0 -> "?"; else -> "SD" }
     val sizeText: String? get() = if (size <= 0) null else if (size >= 1e9) "%.1f GB".format(size / 1e9) else "%.0f MB".format(size / 1e6)
 
-    /** dx.bi's order of "best": ready to play, then quality, HDR before Dolby Vision, a good source */
-    val rank: Double get() = (if (instant) 1e5 else 0.0) + res * 10 + (if (dv) 1 else if (hdr) 2 else 0) +
-        (SOURCE_RANK[source] ?: 0) - (if (lesser) 15000 else 0) - (if (source == "CAM") 30000 else 0)
+    /** The picture's quality, as the desktop's Best quality sort scores it: resolution, then Dolby Vision or HDR, then the source */
+    val score: Int get() = res * 10 + (if (dv) 3 else if (hdr) 2 else 0) + (SOURCE_RANK[source] ?: 0)
 
     companion object {
-        private val SOURCE_RANK = mapOf("BluRay" to 3, "WEB" to 3, "Remux" to 2, "HDTV" to 1)
+        private val SOURCE_RANK = mapOf("Remux" to 4, "BluRay" to 3, "WEB" to 2, "HDTV" to 1, "CAM" to -10)
+
+        /** Best quality first; of the same quality, ready to play, then most seeds, then largest */
+        val BEST: Comparator<StreamOption> = compareByDescending<StreamOption> { it.score }
+            .thenByDescending { it.instant }.thenByDescending { it.seeds }.thenByDescending { it.size }
         fun from(i: Int, o: JSONObject) = StreamOption(
             i, o.optString("play"), o.optString("addon"), o.optString("filename"), o.optString("label"), o.optBoolean("torrent"), o.optString("provider"), o.optString("site"),
             o.optString("codec"), o.optBoolean("instant"), o.optBoolean("pending"), o.optBoolean("lesser"), o.optInt("res"), o.optBoolean("hdr"),

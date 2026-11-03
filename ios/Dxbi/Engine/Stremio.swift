@@ -417,14 +417,30 @@ final class Stremio {
         let target = nextTarget
         nextTarget = .player
         page.js("window.__dxbiIos.active = \(Json.quote(json))")
-        if target == .otherApp, let app = OtherApp.find(otherApp), let url = app.link(payload) {
-            UIApplication.shared.open(url)
-            // (another app keeps no watch progress here: back to the title, as it was)
-            closed(position: 0, duration: 0, ended: false, error: nil)
-            return
+        if target == .otherApp {
+            if let app = OtherApp.find(otherApp), let url = app.link(payload) {
+                UIApplication.shared.open(url)
+                // (another app keeps no watch progress here: back to the title, as it was)
+                closed(position: 0, duration: 0, ended: false, error: nil)
+                return
+            }
+            show("No external player found: install Infuse, VLC, Outplayer or SenPlayer. Playing it here.")
         }
         playback = Playback(payload: payload, stremio: self)
     }
+
+    /** The player's ⋯ → Play with External Player: carries on in another app */
+    func playExternally(_ playback: Playback) {
+        guard let app = OtherApp.find(otherApp), let url = app.link(playback.payload) else {
+            show("No external player found: install Infuse, VLC, Outplayer or SenPlayer.")
+            return
+        }
+        playback.finish(ended: false)
+        UIApplication.shared.open(url)
+    }
+
+    /** Your stats (dx.bi's Watch stats), or nil when they're switched off */
+    func stats() async -> JSON? { await dx("phone.stats") as? JSON }
 
     func progress(position: Double, duration: Double, paused: Bool) {
         page.js("window.__dxbiTv && window.__dxbiTv.onProgress(\(Int(position * 1000)), \(Int(duration * 1000)), \(paused))")

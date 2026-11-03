@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/** Players on the phone a stream can be handed to (Settings → Play videos in, and Play in Another App) */
+/** Players on the phone a stream can be handed to (Settings → Play videos in, and Play with External Player) */
 struct OtherApp: Identifiable, Hashable {
     var id: String
     var name: String

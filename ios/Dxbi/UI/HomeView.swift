@@ -59,13 +59,15 @@ struct HomeView: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
+            // the billboard shows through the top bar, as on Apple TV
+            .scrollEdgeEffectHidden(true, for: .top)
             .ignoresSafeArea(edges: .top)
         }
         .screenBackground()
         .navigationTitle("Home")
         .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Logo(size: 30) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { party = true } label: { Image(systemName: "person.2.fill") }
                     .accessibilityLabel("Watch party")
@@ -83,7 +85,7 @@ struct HomeView: View {
 
     /** Netflix's Movies · Series chips */
     private var kinds: some View {
-        let types = Array(Set(stremio.rows.map(\.type))).sorted { a, b in a == "movie" || (a == "series" && b != "movie") }
+        let types = ["movie", "series", "anime"].filter { t in stremio.rows.contains { $0.type == t } }
         return ScrollView(.horizontal) {
             HStack(spacing: 10) {
                 ForEach(types.prefix(4), id: \.self) { t in
@@ -226,8 +228,11 @@ private struct Billboard: View {
 
     private func slide(_ title: Title) -> some View {
         ZStack(alignment: .bottom) {
-            Art(url: title.backdrop)
+            // (the picture fills its own slide and no more: it spilled onto the next while swiping)
+            Color.clear
+                .frame(maxWidth: .infinity)
                 .frame(height: height)
+                .overlay { Art(url: title.backdrop) }
                 .clipped()
                 .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.25), .init(color: .clear, location: 0.45), .init(color: .black, location: 0.92)], startPoint: .top, endPoint: .bottom))
             VStack(spacing: 12) {

@@ -84,8 +84,8 @@ fun SettingsScreen(stremio: Stremio, onBack: () -> Unit) {
                 val other by stremio.playInOtherApp.collectAsState()
                 Text("PLAYER", color = Dx.Accent, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = Gutter, top = 22.dp, bottom = 4.dp))
                 SettingRow(
-                    Setting("playIn", "select", "Play videos in", "dx.bi's player, or another app on this phone (VLC, mpv, MX Player…). The player's ⧉ button and each stream's ⋮ menu open another app any time.",
-                        "", listOf(false to "dx.bi's player", true to "Another app (ask which)"), other),
+                    Setting("playIn", "select", "Play videos in", "dx.bi's player, or an external player on this phone (VLC, mpv, MX Player…). The player's More menu and each stream's ⋮ menu play with an external player any time.",
+                        "", listOf(false to "dx.bi's player", true to "External player (ask which)"), other),
                     onToggle = {}, onPick = { stremio.setPlayInOtherApp(it == true) }, onEdit = {},
                 )
             }

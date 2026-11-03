@@ -9,8 +9,9 @@ struct PosterGrid: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 108, maximum: 170), spacing: 12)], spacing: 14) {
             ForEach(items) { title in
                 NavigationLink(value: Route.title(title.ref)) {
-                    Art(url: title.art)
-                        .aspectRatio(2 / 3, contentMode: .fill)
+                    Color.clear
+                        .aspectRatio(2 / 3, contentMode: .fit)
+                        .overlay { Art(url: title.art) }
                         .clipShape(.rect(cornerRadius: 14))
                         .overlay(alignment: .topTrailing) {
                             if title.watched {
@@ -56,10 +57,7 @@ struct SearchView: View {
                             .padding(.vertical, 4)
                         }
                     }
-                    if !stremio.billboard.isEmpty {
-                        Text("Popular").font(.title3.bold()).padding(.top, 10)
-                        PosterGrid(items: stremio.billboard).padding(.horizontal, -16)
-                    }
+                    hints.padding(.top, recent.isEmpty ? 60 : 30)
                 }
                 .padding(.horizontal, Dx.gutter)
             } else {
@@ -98,6 +96,24 @@ struct SearchView: View {
             try? await Task.sleep(for: .milliseconds(600))
             if !Task.isCancelled, q != searched { searched = q; stremio.search(q) }
         }
+    }
+
+    /** Nothing typed yet: what Search finds, as Stremio's desktop app says it */
+    private var hints: some View {
+        VStack(spacing: 30) {
+            Text("You can search anything…").font(.title3).foregroundStyle(Dx.muted)
+            HStack(alignment: .top, spacing: 12) {
+                ForEach([("film.stack", "Movies, series & anime"), ("person.fill", "Actors, directors & writers"), ("tv", "Channels & TV from your addons")], id: \.0) { icon, label in
+                    VStack(spacing: 12) {
+                        Image(systemName: icon).font(.system(size: 34)).frame(height: 40)
+                        Text(label).font(.footnote).multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(Dx.muted)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func run() {

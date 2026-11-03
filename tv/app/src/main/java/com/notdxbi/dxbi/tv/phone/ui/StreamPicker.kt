@@ -74,7 +74,7 @@ fun StreamPicker(
     val shown = remember(all, quality, provider, sort, instantOnly) {
         val kept = all.filter { (quality == null || it.quality == quality) && (provider == null || it.provider == provider) && (!instantOnly || it.instant) }
         when (sort) {
-            Sort.Best -> kept.sortedWith(compareByDescending<StreamOption> { it.rank }.thenByDescending { it.seeds })
+            Sort.Best -> kept.sortedWith(StreamOption.BEST)
             Sort.Seeds -> kept.sortedByDescending { it.seeds }
             Sort.Largest -> kept.sortedByDescending { it.size }
             Sort.Smallest -> kept.sortedBy { if (it.size > 0) it.size else Double.MAX_VALUE }
@@ -191,7 +191,7 @@ private fun StreamRow(s: StreamOption, picked: Boolean, onPlayIn: (PlaybackBus.T
                     modifier = Modifier.padding(start = 4.dp).size(22.dp).clip(CircleShape).clickable { menu = true },
                 )
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Play in another app") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.External) })
+                    DropdownMenuItem(text = { Text("Play with external player") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.External) })
                     // (a torrent plays from the phone itself: a TV can't reach it, and it isn't a file to save)
                     if (!s.torrent) {
                         DropdownMenuItem(text = { Text("Cast to a TV") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.Cast) })

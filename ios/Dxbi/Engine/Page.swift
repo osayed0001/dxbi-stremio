@@ -49,7 +49,7 @@ final class Page: NSObject {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.websiteDataStore = .default()
-        webView = WKWebView(frame: UIScreen.main.bounds, configuration: config)
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 800), configuration: config)
         super.init()
         let controller = config.userContentController
         controller.add(WeakHandler(self), name: "dxbi")
@@ -58,8 +58,9 @@ final class Page: NSObject {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // Stremio's web app is made for a computer's browser
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15 dxbi-ios/\(Self.version)"
+        // Stremio's web app is made for a computer's browser. dxbi-tv/ tells dx.bi it runs in the app,
+        // as on Android (no intro, the app's own player…)
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15 dxbi-tv/\(Self.version) dxbi-ios"
         #if DEBUG
         webView.isInspectable = true
         #endif

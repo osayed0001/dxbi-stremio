@@ -1,10 +1,13 @@
+import AVFoundation
+import CoreMedia
 import Foundation
-import Libmpv
+import MPVKit
 import UIKit
 
 /**
- * mpv (through MPVKit) drawing into a Metal layer: it plays what Apple's player can't (MKV, HEVC,
- * Dolby and DTS sound, ASS subtitles), which is most of what addons find.
+ * mpv (through MPVKit) playing what Apple's player can't (MKV, HEVC, Dolby and DTS sound, ASS
+ * subtitles), which is most of what addons find. It draws into an AVSampleBufferDisplayLayer
+ * (mpv's avfoundation output), the kind of layer picture in picture can take over.
  */
 final class MPV {
 
@@ -33,21 +36,29 @@ final class MPV {
     private(set) var tracks: [Track] = []
     private(set) var started = false
 
-    let layer = MetalLayer()
+    let layer = AVSampleBufferDisplayLayer()
+    /** The layer's clock: the frames mpv sends are stamped from it, and picture in picture reads it */
+    private var timebase: CMTimebase?
     private var handle: OpaquePointer?
     private let queue = DispatchQueue(label: "dxbi.mpv", qos: .userInitiated)
 
     init() {
-        layer.contentsScale = UIScreen.main.nativeScale
-        layer.framebufferOnly = true
+        layer.videoGravity = .resizeAspect
+        layer.preventsDisplaySleepDuringVideoPlayback = true
         layer.backgroundColor = UIColor.black.cgColor
+        if CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault, sourceClock: CMClockGetHostTimeClock(), timebaseOut: &timebase) == noErr, let timebase {
+            CMTimebaseSetTime(timebase, time: .zero)
+            CMTimebaseSetRate(timebase, rate: 0)
+            layer.controlTimebase = timebase
+        }
         guard let mpv = mpv_create() else { return }
         handle = mpv
         option("wid", layer)
-        set("vo", "gpu-next")
-        set("gpu-api", "vulkan")
-        set("gpu-context", "moltenvk")
+        set("vo", "avfoundation")
+        // subtitles drawn into the picture, so they show in picture in picture too
+        set("avfoundation-composite-osd", "yes")
         set("hwdec", "videotoolbox")
+        set("hwdec-software-fallback", "yes")
         set("video-rotate", "no")
         set("keep-open", "yes")
         set("idle", "yes")
@@ -88,7 +99,7 @@ final class MPV {
         mpv_set_option_string(handle, name, value)
     }
 
-    private func option(_ name: String, _ layer: CAMetalLayer) {
+    private func option(_ name: String, _ layer: CALayer) {
         guard let handle else { return }
         var pointer = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         mpv_set_option(handle, name, MPV_FORMAT_INT64, &pointer)
@@ -135,13 +146,33 @@ final class MPV {
     func seek(by seconds: Double) { command(["seek", String(format: "%.3f", seconds), "relative+exact"]) }
     func setSpeed(_ rate: Double) { property("speed", String(format: "%.2f", rate)) }
     func select(_ type: String, _ id: Int?) { property(type == "audio" ? "aid" : "sid", id.map(String.init) ?? "no") }
-    /** Fill the screen (cropping the edges) or fit it */
-    func fill(_ on: Bool) { property("panscan", on ? "1.0" : "0.0") }
+    /** Fit the screen, fill it (cropping the edges) or stretch to it */
+    func gravity(_ g: AVLayerVideoGravity) { layer.videoGravity = g }
     func subtitleScale(_ scale: Double) { property("sub-scale", String(format: "%.2f", scale)) }
     func subtitleDelay(_ seconds: Double) { property("sub-delay", String(format: "%.2f", seconds)) }
 
-    /** Turns the picture off while in the background (a Metal layer that isn't on screen can't be drawn to) */
-    func background(_ away: Bool) { property("vid", away ? "no" : "auto") }
+    /** Keeps the layer's clock with mpv's: where it is, and how fast it's going */
+    private func clock() {
+        guard let timebase else { return }
+        CMTimebaseSetTime(timebase, time: CMTime(seconds: position, preferredTimescale: 1000))
+        CMTimebaseSetRate(timebase, rate: paused ? 0 : speed)
+    }
+
+    /** Video and sound details for the player's info panel (mpv's own reading of the stream) */
+    func info() -> [(String, String)] {
+        let w = string("video-params/w") ?? "", h = string("video-params/h") ?? ""
+        let fps = Double(string("container-fps") ?? "").map { String(format: "%.3g fps", $0) }
+        let rate = Double(string("video-bitrate") ?? "").map { String(format: "%.1f Mbps", $0 / 1e6) }
+        let cache = Double(string("demuxer-cache-duration") ?? "").map { String(format: "%.0f s ahead", $0) }
+        return [
+            ("Video", [string("video-codec"), w.isEmpty ? nil : "\(w)×\(h)", fps, string("video-params/gamma").flatMap { $0 == "pq" || $0 == "hlg" ? "HDR" : nil }].compactMap { $0 }.joined(separator: " · ")),
+            ("Decoder", string("hwdec-current").map { $0 == "no" || $0.isEmpty ? "Software" : "Hardware (\($0))" } ?? ""),
+            ("Sound", [string("audio-codec-name")?.uppercased(), string("audio-params/channel-count").map { "\($0) channels" }].compactMap { $0 }.joined(separator: " · ")),
+            ("Bitrate", rate ?? ""),
+            ("Buffer", cache ?? ""),
+            ("File", string("filename") ?? ""),
+        ].filter { !$0.1.isEmpty }
+    }
 
     // MARK: - Hearing back
 
@@ -186,6 +217,7 @@ final class MPV {
                         case "track-list": if let tracks { self.tracks = tracks }
                         default: break
                         }
+                        self.clock()
                         self.onChange?()
                     }
                 case MPV_EVENT_FILE_LOADED:
@@ -212,22 +244,3 @@ final class MPV {
     }
 }
 
-/**
- * The layer mpv draws into. MoltenVK sets its size to 1×1 for a moment to finish a frame, which
- * flickered and could stay that way (mpv#13651): sizes that small are ignored.
- */
-final class MetalLayer: CAMetalLayer {
-    override var drawableSize: CGSize {
-        get { super.drawableSize }
-        set { if Int(newValue.width) > 1 && Int(newValue.height) > 1 { super.drawableSize = newValue } }
-    }
-
-    // HDR: switching the screen's extended range on only works from the main thread
-    override var wantsExtendedDynamicRangeContent: Bool {
-        get { super.wantsExtendedDynamicRangeContent }
-        set {
-            if Thread.isMainThread { super.wantsExtendedDynamicRangeContent = newValue }
-            else { DispatchQueue.main.sync { super.wantsExtendedDynamicRangeContent = newValue } }
-        }
-    }
-}
