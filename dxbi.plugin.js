@@ -15176,12 +15176,20 @@
           series: x.series,
         };
       },
-      // The cast with their photos: TMDB's with a TMDB key in dx.bi settings, else Wikipedia's picture
-      // of each of [names] (the title's cast and directors, as Stremio lists them)
+      // The cast with their photos: TMDB's (with a TMDB key in dx.bi settings), and Wikipedia's for anyone
+      // TMDB has none of, or for everyone without a key. [names]: the title's cast and directors as Stremio
+      // lists them ({name, role}), used when TMDB has nothing
       async cast(type, imdb, names) {
+        const fromTmdb = settings.tmdbKey.trim() && /^tt\d+$/.test(imdb || "") ? await this.castFromTmdb(type, imdb).catch(() => null) : null;
+        const list = (fromTmdb && fromTmdb.length ? fromTmdb : (Array.isArray(names) ? names : []).map((n) => ({ name: String(n.name || n), role: n.role || "" })))
+          .map((p) => ({ name: p.name, role: p.role || "", photo: p.photo || null }));
+        const missing = list.filter((p) => !p.photo).slice(0, 16);
+        const photos = await Promise.all(missing.map((p) => this.wikipediaPhoto(p.name)));
+        missing.forEach((p, i) => { p.photo = photos[i]; });
+        return list;
+      },
+      async castFromTmdb(type, imdb) {
         const token = settings.tmdbKey.trim();
-        if (!token) return this.castFromWikipedia(names);
-        if (!/^tt\d+$/.test(imdb || "")) return null;
         const key = `cast:${type}:${imdb}`;
         const cached = readCached(key);
         if (cached !== undefined) return cached;
@@ -15194,35 +15202,35 @@
         const found = await get(`/find/${encodeURIComponent(imdb)}?external_source=imdb_id`);
         const first = found && found[`${kind}_results`] && found[`${kind}_results`][0];
         if (!first) return null;
-        const credits = await get(`/${kind}/${first.id}/credits`);
+        // (a series: everyone across its seasons, with their main character)
+        const credits = await get(kind === "tv" ? `/tv/${first.id}/aggregate_credits` : `/movie/${first.id}/credits`);
         if (!credits) return null;
         const photo = (p) => (p ? `https://image.tmdb.org/t/p/w185${p}` : null);
+        const crew = (credits.crew || []).filter((c) => c.job === "Director" || (c.jobs || []).some((j) => j.job === "Director"));
         const result = [
-          ...(credits.crew || []).filter((c) => c.job === "Director").slice(0, 2).map((c) => ({ name: c.name, role: "Director", photo: photo(c.profile_path) })),
-          ...(credits.cast || []).slice(0, 20).map((c) => ({ name: c.name, role: c.character || "", photo: photo(c.profile_path) })),
+          ...crew.slice(0, 2).map((c) => ({ name: c.name, role: "Director", photo: photo(c.profile_path) })),
+          ...(credits.cast || []).slice(0, 20).map((c) => ({ name: c.name, role: c.character || (c.roles && c.roles[0] && c.roles[0].character) || "", photo: photo(c.profile_path) })),
         ];
         writeCached(key, result);
         return result;
       },
-      async castFromWikipedia(names) {
-        const list = (Array.isArray(names) ? names : []).slice(0, 16);
-        // (only a page about someone in film or TV: a name can belong to anyone)
+      // A person's picture from Wikipedia: only from a page about someone in film or TV (a name can
+      // belong to anyone)
+      async wikipediaPhoto(name) {
+        const key = `person:${name}`;
+        const cached = readCached(key);
+        if (cached !== undefined) return cached;
         const screen = /\b(actor|actress|director|filmmaker|comedian|screenwriter|producer|presenter|voice|television|film)\b/i;
-        const photoOf = async (name) => {
-          const key = `person:${name}`;
-          const cached = readCached(key);
-          if (cached !== undefined) return cached;
-          let photo = null;
-          try {
-            const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, "_"))}`, { signal: AbortSignal.timeout(8000) });
-            const j = r.ok ? await r.json() : null;
-            if (j && j.type === "standard" && screen.test(j.description || "") && j.thumbnail && /^https:/.test(j.thumbnail.source)) photo = j.thumbnail.source;
-          } catch (_) { return null; } // offline: try again another time
-          writeCached(key, photo);
-          return photo;
-        };
-        const photos = await Promise.all(list.map((n) => photoOf(String(n.name || n))));
-        return list.map((n, i) => ({ name: String(n.name || n), role: n.role || "", photo: photos[i] }));
+        let photo = null;
+        try {
+          const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, "_"))}?redirect=true`, { signal: AbortSignal.timeout(8000) });
+          const j = r.ok ? await r.json() : null;
+          if (j && j.type === "standard" && screen.test(j.description || "") && j.thumbnail && /^https:/.test(j.thumbnail.source)) photo = j.thumbnail.source;
+        } catch (_) {
+          return null; // offline: try again another time
+        }
+        writeCached(key, photo);
+        return photo;
       },
       async billboard() {
         if (!settings.billboard) return [];

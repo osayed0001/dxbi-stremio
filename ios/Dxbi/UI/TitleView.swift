@@ -73,10 +73,10 @@ struct TitleView: View {
             if stremio.details?.metaId != ref.id { stremio.open(ref.type, ref.id) }
             reviews = await stremio.reviews(ref.type, ref.id)
         }
-        .task(id: "\(title.imdb ?? "")\(details?.cast.count ?? -1)") {
+        .task(id: "\(ref.id)-\(details?.state == .ready)") {
             guard let d = details, d.state == .ready else { return }
             let names: [JSON] = d.directors.prefix(3).map { ["name": $0, "role": "Director"] } + d.cast.prefix(13).map { ["name": $0, "role": ""] }
-            cast = await stremio.cast(ref.type, title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : ""), names: names)
+            cast = await stremio.cast(ref.type, imdbId ?? "", names: names)
         }
         .task(id: title.background ?? title.poster) {
             if let c = await ArtColour.of(title.backdrop) { withAnimation(.easeOut(duration: 0.4)) { tint = c } }
@@ -149,9 +149,13 @@ struct TitleView: View {
         return "S\(s), E\(e) · \(v.title)"
     }
 
+    /** The title's IMDb id (tt…): Stremio's own id for most titles. (Its "imdb" link is the IMDb rating.) */
+    private var imdbId: String? {
+        ref.id.wholeMatch(of: /tt\d+/) != nil ? ref.id : nil
+    }
+
     private var shareLink: URL? {
-        if let imdb = title.imdb ?? (ref.id.hasPrefix("tt") ? ref.id : nil) { return URL(string: "https://www.imdb.com/title/\(imdb)/") }
-        return nil
+        imdbId.flatMap { URL(string: "https://www.imdb.com/title/\($0)/") }
     }
 
     // MARK: - The top: art, logo, Play
@@ -207,6 +211,8 @@ struct TitleView: View {
                         .opacity(1 - covered)
                 }
         }
+        // the art's colour runs down to the end of the scores, where the seasons start on black
+        .background(tint)
     }
 
     private var buttons: some View {
