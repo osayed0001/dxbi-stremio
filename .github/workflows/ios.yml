@@ -21,6 +21,10 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Mac to build on (macos-15-intel when GitHub's Apple-chip Macs are all busy)"
+        default: macos-26
 
 permissions:
   contents: write
@@ -31,7 +35,7 @@ concurrency:
 
 jobs:
   ipa:
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     defaults:
       run:
         working-directory: ios
@@ -41,6 +45,9 @@ jobs:
       - name: Tools
         run: |
           brew install xcodegen
+          # the newest Xcode 26 on this Mac (the app needs iOS 26's SDK; older Macs default to an older Xcode)
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
           xcodebuild -version
 
       # MPVKit (the player) is a large download: kept between runs
