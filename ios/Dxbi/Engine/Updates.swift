@@ -26,7 +26,9 @@ enum Updates {
     static func check() async -> Release? {
         guard Date().timeIntervalSince(lastCheck) > recheck, !repo.isEmpty, repo.contains("/") else { return nil }
         lastCheck = Date()
-        guard let found = await fromApi() ?? fromPage() else { return nil }
+        var found = await fromApi()
+        if found == nil { found = await fromPage() }
+        guard let found else { return nil }
         guard isNewer(found.version, than: Page.version), defaults.string(forKey: "update.skipped") != found.version else { return nil }
         return found
     }
