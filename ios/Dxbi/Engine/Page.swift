@@ -75,6 +75,13 @@ final class Page: NSObject {
 
     static var utcOffset: Int { TimeZone.current.secondsFromGMT() / 60 }
 
+    /** The phone's model identifier (iPhone17,1) */
+    static var model: String {
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+    }
+
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0" }
 
     // MARK: - What the page is given before it starts
@@ -91,7 +98,8 @@ final class Page: NSObject {
     private func startScript() -> String {
         let device: JSON = [
             "app": Self.version,
-            "device": UIDevice.current.model,
+            // (reports show this: the model, e.g. iPhone17,1, and that it's the iPhone app)
+            "device": "\(Self.model) · dx.bi for iPhone",
             "ios": UIDevice.current.systemVersion,
             "phone": true,
         ]

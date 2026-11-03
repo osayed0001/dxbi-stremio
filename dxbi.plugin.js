@@ -10450,8 +10450,7 @@
     sentAt: 0,
 
     where() {
-      if (IN_TV && /\bdxbi-ios\b/.test(navigator.userAgent)) return "dx.bi for iPhone";
-      if (IN_TV && window.__dxbiTv && window.__dxbiTv.phone) return "dx.bi for Android phones";
+      // (the report relay knows these three: a phone's report says it's a phone in its device details)
       if (IN_TV) return "dx.bi TV";
       if (IN_APP) return "dx.bi app";
       return "Stremio Enhanced plugin";

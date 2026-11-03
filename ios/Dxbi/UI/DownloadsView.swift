@@ -16,6 +16,8 @@ struct DownloadsView: View {
                     .buttonStyle(.plain)
                     .swipeActions {
                         Button(role: .destructive) { downloads.remove(item) } label: { Label("Delete", systemImage: "trash") }
+                            // (the app's white tint made it a blank white circle)
+                            .tint(.red)
                     }
                     .contextMenu {
                         if item.state == .done { Button { stremio.play(download: item) } label: { Label("Play", systemImage: "play.fill") } }
