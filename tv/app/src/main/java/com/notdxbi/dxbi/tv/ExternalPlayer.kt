@@ -65,6 +65,7 @@ object ExternalPlayer {
         torrent = stream.optBoolean("torrent")
         try {
             launcher.launch(intent)
+            PlaybackBus.playedElsewhere(json)
         } catch (_: Exception) {
             noApp(activity)
             finished(null)

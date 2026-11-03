@@ -89,6 +89,10 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     val discover: StateFlow<Discover?> = engine.state("discover").map(Discover::from).stateIn(scope, SharingStarted.Eagerly, null)
 
     init {
+        // Played in another app: it keeps no watch progress here, so it counts as watched once it's opened there
+        PlaybackBus.onExternal = { json ->
+            runCatching { JSONObject(json) }.getOrNull()?.text("videoId")?.let { setWatched(it, true) }
+        }
         // Every time the page (re)starts: Home's rows, then dx.bi's pieces
         scope.launch {
             engine.ready.collect { up ->
@@ -191,6 +195,20 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     }
 
     fun setWatched(watched: Boolean) = scope.launch { ask("watched", JSONObject().put("value", watched)) }
+
+    /** One video of the open title watched or not (a film: its own id); [upTo]: and the episodes before it in its season */
+    fun setWatched(videoId: String, watched: Boolean, upTo: Boolean = false) = scope.launch {
+        ask("videoWatched", JSONObject().put("id", videoId).put("value", watched).put("upTo", upTo))
+    }
+
+    /**
+     * Report a problem, as dx.bi does everywhere: what they typed, with dx.bi's version, the phone,
+     * settings, addon names and recent errors (no passwords, keys or stream links). The report's code
+     * to post in dx.bi's Discord, or what went wrong
+     */
+    suspend fun report(description: String): Result<String> = runCatching {
+        engine.call("dx", JSONObject().put("method", "report.send").put("args", JSONArray().put(description)), 30_000) as? String ?: ""
+    }
 
     fun removeFromContinue(id: String) = scope.launch { ask("dismiss", JSONObject().put("id", id)) }
 

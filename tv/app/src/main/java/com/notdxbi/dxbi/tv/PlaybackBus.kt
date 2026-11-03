@@ -30,6 +30,14 @@ object PlaybackBus {
 
     fun takeTarget(): Target = nextTarget.also { nextTarget = Target.Player }
 
+    /** A stream opened in another app (VLC, mpv…): the phone app marks it watched, as it keeps no progress here */
+    @Volatile
+    var onExternal: ((String) -> Unit)? = null
+
+    fun playedElsewhere(json: String) {
+        onExternal?.invoke(json)
+    }
+
     /** The open player, for what the page's watch party asks of it */
     @Volatile
     var player: PlayerActivity? = null

@@ -4,7 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -233,7 +235,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
             val shown = season ?: nextVideo(details)?.season ?: seasons.firstOrNull()
             item { SeasonPicker(seasons, shown) { season = it } }
             items(details.videos.filter { it.season == shown }, key = { it.id }) { v ->
-                Episode(v, resumeHere = v.id == details.resumeVideoId) { start(v.id) }
+                Episode(v, resumeHere = v.id == details.resumeVideoId, onWatched = { watched, upTo -> stremio.setWatched(v.id, watched, upTo) }) { start(v.id) }
             }
         }
         if (details != null && details.cast.isNotEmpty()) item {
@@ -266,7 +268,7 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
                             SeasonPicker(seasons, shown) { season = it }
                             LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
                                 items(details.videos.filter { it.season == shown }, key = { it.id }) { v ->
-                                    Episode(v, resumeHere = v.id == details.resumeVideoId) { start(v.id) }
+                                    Episode(v, resumeHere = v.id == details.resumeVideoId, onWatched = { watched, upTo -> stremio.setWatched(v.id, watched, upTo) }) { start(v.id) }
                                 }
                             }
                         } else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Dx.Accent) }
@@ -405,9 +407,16 @@ private fun seasonName(s: Int?) = when (s) {
     else -> "Season $s"
 }
 
+/** An episode: tap to play it; hold for watched, unwatched, or watched up to here */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Episode(v: Video, resumeHere: Boolean, onPlay: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(enabled = !v.upcoming, onClick = onPlay).padding(horizontal = Gutter, vertical = 10.dp)) {
+private fun Episode(v: Video, resumeHere: Boolean, onWatched: (watched: Boolean, upTo: Boolean) -> Unit, onPlay: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().combinedClickable(enabled = !v.upcoming, onLongClick = { menu = true }, onClick = onPlay).padding(horizontal = Gutter, vertical = 10.dp)) {
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text(if (v.watched) "Mark as unwatched" else "Mark as watched") }, onClick = { menu = false; onWatched(!v.watched, false) })
+            if ((v.episode ?: 0) > 1) DropdownMenuItem(text = { Text("Mark up to here as watched") }, onClick = { menu = false; onWatched(true, true) })
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(132.dp).aspectRatio(16f / 9f)) {
                 Art(v.thumbnail, "", Modifier.fillMaxSize(), RoundedCornerShape(4.dp))

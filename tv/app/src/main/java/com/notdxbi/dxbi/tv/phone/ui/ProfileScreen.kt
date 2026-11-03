@@ -35,11 +35,13 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -91,6 +94,8 @@ fun ProfileScreen(
     val account by stremio.account.collectAsState()
     val myList by stremio.myList.collectAsState()
     val continueWatching by stremio.continueWatching.collectAsState()
+    var reporting by rememberSaveable { mutableStateOf(false) }
+    if (reporting) ReportDialog(stremio) { reporting = false }
     LazyColumn(
         Modifier.fillMaxSize().background(Dx.Background).windowInsetsPadding(WindowInsets.safeDrawing),
         contentPadding = PaddingValues(bottom = 24.dp + LocalBarSpace.current),
@@ -116,12 +121,51 @@ fun ProfileScreen(
                 Line(Icons.Filled.Tune, "Customise Home", "Order and hide Home's rows", onClick = onCustomiseHome)
                 Line(Icons.Filled.Settings, "dx.bi settings", "Rows, reviews, skipping, watch party and more", onClick = onSettings)
                 Line(Icons.Filled.Subtitles, "Playback & subtitles", "Languages, subtitles, next episode, streaming server", onClick = onStremioSettings)
+                Line(Icons.Filled.BugReport, "Report a problem", "Tell dx.bi's developer what went wrong") { reporting = true }
                 // (signing out of a guest session goes back to the sign-in screen)
                 if (account?.signedIn == true) Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", account?.email) { stremio.signOut() }
                 else Line(Icons.AutoMirrored.Filled.ExitToApp, "Sign in", "Your library, progress and addons on every device") { stremio.signOut() }
             }
         }
     }
+}
+
+/** Report a problem: what went wrong, sent with dx.bi's own report (as on the desktop and TV) */
+@Composable
+private fun ReportDialog(stremio: Stremio, onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var text by rememberSaveable { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf<String?>(null) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onClose() },
+        title = { Text(if (code != null) "Report sent" else "Report a problem") },
+        text = {
+            Column {
+                if (code != null) {
+                    Text("Thanks! Your report code is $code.\nPost it in dx.bi's Discord (#bug-reports) so it can be matched to you.", color = Dx.Text)
+                } else {
+                    Text("What went wrong, and what were you doing? dx.bi adds its version, this phone's model, your settings, addon names and recent errors. No passwords, keys or stream links are sent.", color = Dx.Muted, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = text, onValueChange = { text = it }, minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
+                    problem?.let { Text(it, color = Dx.Accent, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+                }
+            }
+        },
+        confirmButton = {
+            if (code != null) TextButton(onClick = onClose) { Text("OK") }
+            else TextButton(enabled = !sending, onClick = {
+                sending = true
+                problem = null
+                scope.launch {
+                    stremio.report(text).onSuccess { code = it }.onFailure { problem = it.message ?: "Couldn't send the report. Try again in a moment." }
+                    sending = false
+                }
+            }) { Text(if (sending) "Sending…" else "Send report") }
+        },
+        dismissButton = { if (code == null) TextButton(enabled = !sending, onClick = onClose) { Text("Cancel") } },
+    )
 }
 
 @Composable

@@ -564,6 +564,7 @@ class PlayerActivity : AppCompatActivity() {
         exo.pause()
         try {
             elsewhere.launch(chooser)
+            PlaybackBus.playedElsewhere(stream.toString())
         } catch (_: Exception) {
             ExternalPlayer.noApp(this)
         }
