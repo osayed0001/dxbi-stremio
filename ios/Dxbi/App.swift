@@ -30,6 +30,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         Self.orientations
     }
+
+    /** Downloads finished while the app was away: iOS wakes it to hear about them */
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        MainActor.assumeIsolated { Downloads.shared.backgroundDone = completionHandler }
+    }
 }
 
 enum AppTab: Hashable { case home, discover, library, search }

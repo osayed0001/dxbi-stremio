@@ -257,6 +257,12 @@ struct LibraryView: View {
         }
         .screenBackground()
         .navigationTitle("Library")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink { DownloadsView() } label: { Image(systemName: "arrow.down.circle") }
+                    .accessibilityLabel("Downloads")
+            }
+        }
         .onAppear { stremio.loadLibrary(type) }
         .onChange(of: type) { _, t in stremio.loadLibrary(t) }
     }

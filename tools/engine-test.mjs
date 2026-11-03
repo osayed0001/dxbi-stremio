@@ -214,3 +214,22 @@ console.log("PASS addons and Stremio's settings");
 await ask(40, "watched", { value: true });
 assert.deepEqual(dispatched.at(-1), { action: { action: "MetaDetails", args: { action: "MarkAsWatched", args: true } }, field: "meta_details" });
 console.log("PASS mark as watched");
+
+// One episode (and, up to here, the ones before it in its season); a film's id marks the film
+const episodes = states.meta_details.metaItem.content.content.videos;
+const savedVideos = episodes.slice();
+episodes.unshift({ id: "tt2:1:1", season: 1, episode: 1 }, { id: "tt2:1:2", season: 1, episode: 2 }, { id: "tt2:2:1", season: 2, episode: 1 });
+let mark = dispatched.length;
+await ask(41, "videoWatched", { id: "tt2:1:3", value: true });
+assert.equal(dispatched.length - mark, 1);
+assert.deepEqual(dispatched.at(-1).action.args.action, "MarkVideoAsWatched");
+assert.deepEqual(dispatched.at(-1).action.args.args[0].id, "tt2:1:3");
+assert.equal(dispatched.at(-1).action.args.args[1], true);
+mark = dispatched.length;
+await ask(42, "videoWatched", { id: "tt2:1:3", value: true, upTo: true });
+assert.deepEqual(dispatched.slice(mark).map((d) => d.action.args.args[0].id).sort(), ["tt2:1:1", "tt2:1:2", "tt2:1:3"], "season 1 up to episode 3, not season 2");
+await ask(43, "videoWatched", { id: "tt2", value: false });
+assert.deepEqual(dispatched.at(-1).action.args, { action: "MarkAsWatched", args: false });
+assert.equal((await ask(44, "videoWatched", { id: "tt9:1:1", value: true })).ok, false, "not this title's");
+episodes.splice(0, episodes.length, ...savedVideos);
+console.log("PASS mark one video, or up to it, as watched");

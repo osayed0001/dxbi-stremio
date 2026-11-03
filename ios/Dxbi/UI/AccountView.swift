@@ -84,10 +84,14 @@ struct AccountView: View {
                 }
                 Section {
                     NavigationLink { AddonsView() } label: { Label("Addons", systemImage: "puzzlepiece.extension.fill") }
+                    NavigationLink { DownloadsView() } label: { Label("Downloads", systemImage: "arrow.down.circle.fill") }
                     NavigationLink { StatsView() } label: { Label("Your Stats", systemImage: "chart.bar.fill") }
                     NavigationLink { CustomiseHomeView() } label: { Label("Customise Home", systemImage: "square.stack.3d.up.fill") }
                     NavigationLink { DxbiSettingsView() } label: { Label("dx.bi Settings", systemImage: "slider.horizontal.3") }
                     NavigationLink { PlaybackSettingsView() } label: { Label("Playback", systemImage: "play.rectangle.fill") }
+                }
+                Section {
+                    NavigationLink { ReportView() } label: { Label("Report a Problem", systemImage: "exclamationmark.bubble.fill") }
                 }
                 Section {
                     if stremio.account?.signedIn == true {

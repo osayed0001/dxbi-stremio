@@ -153,6 +153,7 @@ struct StreamsSheet: View {
         .contextMenu {
             Button { onPlay(s, .player) } label: { Label("Play", systemImage: "play.fill") }
             Button { onPlay(s, .otherApp) } label: { Label("Play with External Player", systemImage: "arrow.up.forward.app") }
+            Button { onPlay(s, .download) } label: { Label("Download", systemImage: "arrow.down.circle") }
             if !s.filename.isEmpty { Button { UIPasteboard.general.string = s.filename } label: { Label("Copy File Name", systemImage: "doc.on.doc") } }
         }
     }

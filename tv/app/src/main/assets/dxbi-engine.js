@@ -278,6 +278,25 @@
       await core().dispatch({ action: "MetaDetails", args: { action: "MarkAsWatched", args: !!value } }, "meta_details");
       push("meta_details");
     },
+    // One video of the title open in details, watched or not (a film: the film itself). [upTo]: and
+    // every episode before it in its season too ("mark up to here as watched")
+    async videoWatched({ id, value, upTo }) {
+      const s = await core().getState("meta_details");
+      const meta = s && s.metaItem && s.metaItem.content;
+      if (!meta || meta.type !== "Ready") throw new Error("no title open");
+      const videos = meta.content.videos || [];
+      const video = videos.find((v) => v.id === id);
+      if (!video) {
+        if (id !== meta.content.id) throw new Error("that isn't this title's");
+        await core().dispatch({ action: "MetaDetails", args: { action: "MarkAsWatched", args: !!value } }, "meta_details");
+      } else {
+        const list = upTo ? videos.filter((v) => v.season === video.season && v.episode != null && v.episode <= video.episode) : [video];
+        for (const v of list) {
+          await core().dispatch({ action: "MetaDetails", args: { action: "MarkVideoAsWatched", args: [v, !!value] } }, "meta_details");
+        }
+      }
+      push("meta_details");
+    },
     // Continue watching: "Remove from row", as Stremio does it
     async dismiss({ id }) {
       await core().dispatch({ action: "Ctx", args: { action: "RewindLibraryItem", args: id } });

@@ -237,6 +237,7 @@ struct TitleView: View {
                 }
                 if let pick = current?.picked {
                     Button { play(pick, in: .otherApp) } label: { Label("Play with External Player", systemImage: "arrow.up.forward.app") }
+                    Button { play(pick, in: .download) } label: { Label("Download", systemImage: "arrow.down.circle") }
                 }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 20, weight: .semibold)).frame(width: 36, height: 36)
@@ -328,6 +329,15 @@ struct TitleView: View {
                 stremio.open(ref.type, ref.id, videoId: v.id)
                 streamsOpen = true
             } label: { Label("Choose a Stream", systemImage: "list.bullet") }
+            Divider()
+            if v.watched {
+                Button { stremio.setWatched(video: v.id, false) } label: { Label("Mark as Unwatched", systemImage: "eye.slash") }
+            } else {
+                Button { stremio.setWatched(video: v.id, true) } label: { Label("Mark as Watched", systemImage: "eye") }
+            }
+            if (v.episode ?? 0) > 1 {
+                Button { stremio.setWatched(video: v.id, true, upTo: true) } label: { Label("Mark Up to Here as Watched", systemImage: "checkmark.circle") }
+            }
         }
     }
 

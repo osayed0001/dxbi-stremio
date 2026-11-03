@@ -10,8 +10,8 @@ import UIKit
 @Observable
 final class Stremio {
 
-    /** Where the app's next stream goes: dx.bi's player, or another app (Infuse, VLC…) */
-    enum Target { case player, otherApp }
+    /** Where the app's next stream goes: dx.bi's player, another app (Infuse, VLC…), or Downloads */
+    enum Target { case player, otherApp, download }
 
     @ObservationIgnored let page = Page()
     @ObservationIgnored private let cache = UserDefaults.standard
@@ -77,6 +77,7 @@ final class Stremio {
         page.onToast = { [weak self] text in self?.show(text) }
         page.onPlay = { [weak self] json in self?.handOver(json) }
         page.onControl = { [weak self] c in self?.playback?.control(c) }
+        Downloads.shared.stremio = self
         for field in ["ctx", "board", "continue_watching_preview", "meta_details", "search", "discover", "library", "installed_addons", "remote_addons", "streaming_server"] {
             page.watch(field)
         }
@@ -431,10 +432,16 @@ final class Stremio {
         let target = nextTarget
         nextTarget = .player
         page.js("window.__dxbiIos.active = \(Json.quote(json))")
+        if target == .download {
+            Downloads.shared.add(payload)
+            // nothing plays: the page goes back to where it was
+            closed(position: 0, duration: 0, ended: false, error: nil)
+            return
+        }
         if target == .otherApp {
             if let app = OtherApp.find(otherApp), let url = app.link(payload) {
                 UIApplication.shared.open(url)
-                // (another app keeps no watch progress here: back to the title, as it was)
+                watchedElsewhere(payload)
                 closed(position: 0, duration: 0, ended: false, error: nil)
                 return
             }
@@ -447,14 +454,25 @@ final class Stremio {
         PlayerHost.show(playback, stremio: self)
     }
 
-    /** The player's ⋯ → Play with External Player: carries on in another app */
+    /** The player's external player button: carries on in another app */
     func playExternally(_ playback: Playback) {
+        if playback.payload.text("offline") != nil { return playback.show("Downloads play here only") }
         guard let app = OtherApp.find(otherApp), let url = app.link(playback.payload) else {
             show("No external player found: install Infuse, VLC, Outplayer or SenPlayer.")
             return
         }
+        watchedElsewhere(playback.payload)
         playback.finish(ended: false)
         UIApplication.shared.open(url)
+    }
+
+    /**
+     * Played in another app: it keeps no watch progress here, so the episode (or film) counts as
+     * watched once it's opened there
+     */
+    private func watchedElsewhere(_ payload: JSON) {
+        guard payload.text("offline") == nil, let video = payload.text("videoId") else { return }
+        setWatched(video: video, true)
     }
 
     /** The cast with their photos (TMDB, with a key in dx.bi settings), or nil */
@@ -466,6 +484,33 @@ final class Stremio {
     var pendingSearch: String?
 
     func searchFor(_ text: String) { pendingSearch = text }
+
+    /**
+     * Report a problem, as dx.bi does everywhere: what they typed, with dx.bi's version, the phone,
+     * settings, addon names and recent errors (no passwords, keys or stream links). The report's code
+     * to post in dx.bi's Discord, or what went wrong
+     */
+    func report(_ description: String) async -> Result<String, Page.Failure> {
+        do {
+            let code = try await page.call("dx", ["method": "report.send", "args": [description]], timeout: 30)
+            return .success((code as? String) ?? "")
+        } catch {
+            return .failure(Page.Failure(message: error.localizedDescription))
+        }
+    }
+
+    /** A download, from the phone */
+    func play(download item: Downloads.Item) {
+        guard let payload = Downloads.shared.playback(item) else { return }
+        let playback = Playback(payload: payload, stremio: self)
+        self.playback = playback
+        PlayerHost.show(playback, stremio: self)
+    }
+
+    /** One video of the open title watched or not (a film: its own id); [upTo]: and the episodes before it in its season */
+    func setWatched(video id: String, _ watched: Bool, upTo: Bool = false) {
+        Task { await ask("videoWatched", ["id": id, "value": watched, "upTo": upTo]) }
+    }
 
     /** Your stats (dx.bi's Watch stats), or nil when they're switched off */
     func stats() async -> JSON? { await dx("phone.stats") as? JSON }
@@ -481,6 +526,13 @@ final class Stremio {
     /** The player closed: the page records where it got to, and goes on to the next episode when asked */
     func closed(position: Double, duration: Double, ended: Bool, error: String?, next: Bool = false) {
         let active = playback?.payload
+        // a download: it keeps its own place (the page didn't hand it over, so there's nothing to tell it)
+        if let id = active?.text("offline") {
+            Downloads.shared.leftAt(id, ms: position * 1000, ended: ended)
+            playback = nil
+            PlayerHost.hide()
+            return
+        }
         let close: JSON = [
             "timeMs": Int(position * 1000),
             "durationMs": Int(duration * 1000),
