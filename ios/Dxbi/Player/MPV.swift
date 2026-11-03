@@ -171,22 +171,6 @@ final class MPV {
         CMTimebaseSetRate(timebase, rate: paused ? 0 : speed)
     }
 
-    /** Video and sound details for the player's info panel (mpv's own reading of the stream) */
-    func info() -> [(String, String)] {
-        let w = string("video-params/w") ?? "", h = string("video-params/h") ?? ""
-        let fps = Double(string("container-fps") ?? "").map { String(format: "%.3g fps", $0) }
-        let rate = Double(string("video-bitrate") ?? "").map { String(format: "%.1f Mbps", $0 / 1e6) }
-        let cache = Double(string("demuxer-cache-duration") ?? "").map { String(format: "%.0f s ahead", $0) }
-        return [
-            ("Video", [string("video-codec"), w.isEmpty ? nil : "\(w)×\(h)", fps, string("video-params/gamma").flatMap { $0 == "pq" || $0 == "hlg" ? "HDR" : nil }].compactMap { $0 }.joined(separator: " · ")),
-            ("Decoder", string("hwdec-current").map { $0 == "no" || $0.isEmpty ? "Software" : "Hardware (\($0))" } ?? ""),
-            ("Sound", [string("audio-codec-name")?.uppercased(), string("audio-params/channel-count").map { "\($0) channels" }].compactMap { $0 }.joined(separator: " · ")),
-            ("Bitrate", rate ?? ""),
-            ("Buffer", cache ?? ""),
-            ("File", string("filename") ?? ""),
-        ].filter { !$0.1.isEmpty }
-    }
-
     // MARK: - Hearing back
 
     private func readTracks() -> [Track] {
