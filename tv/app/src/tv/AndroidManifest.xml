@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
-        <!-- dx.bi TV: on a TV's home screen (and a phone's, for anyone who sideloads it there) -->
-        <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
+<!-- dx.bi TV: its manifest is src/main's. This only takes out what the phone app's libraries bring along -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- (Media3's session library asks for it, for the phone app's lock screen controls) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
 </manifest>

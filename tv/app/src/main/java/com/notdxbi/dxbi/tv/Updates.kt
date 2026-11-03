@@ -130,7 +130,10 @@ object Updates {
                 offering = true
                 val dialog = AlertDialog.Builder(activity)
                     .setTitle("dx.bi $latest is out")
-                    .setMessage("You have $current. Update now? It downloads in the background and installs (Android may ask you to confirm).")
+                    .setMessage(
+                        if (BuildConfig.PHONE_UI) "You have $current. Update now? It downloads in the background and installs (Android may ask you to confirm)."
+                        else "You have $current. Update now? It downloads in the background, then Android asks you to install it.",
+                    )
                     .setPositiveButton("Update") { _, _ -> download(activity, found.url, found.size, latest) }
                     .setNegativeButton("Not now", null)
                     .setNeutralButton("Skip this version") { _, _ -> prefs.edit().putString("skipped", latest).apply() }
@@ -199,7 +202,8 @@ object Updates {
      * brings that up), as it does on older Androids, which get the installer screen straight away.
      */
     private fun install(activity: MainActivity, apk: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // (the phone app: dx.bi TV keeps Android's installer screen)
+        if (BuildConfig.PHONE_UI && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 val installer = activity.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {

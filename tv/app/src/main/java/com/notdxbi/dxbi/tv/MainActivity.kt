@@ -91,8 +91,8 @@ class MainActivity : AppCompatActivity() {
             root.addView(phoneUi, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
         // Only when dx.bi is opened, not when the screen is rebuilt (after a page crash, a turned phone).
-        // Not on phones: the film is made for a TV screen.
-        if (savedInstanceState == null && !Bridge(this).isPhone()) intro = Intro(this, root).also { it.start() }
+        // Not in the phone app: the film is made for a TV screen.
+        if (savedInstanceState == null && !BuildConfig.PHONE_UI) intro = Intro(this, root).also { it.start() }
         web.setBackgroundColor(getColor(R.color.background))
         web.isFocusable = true
         web.isFocusableInTouchMode = true

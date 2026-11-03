@@ -149,6 +149,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private val phone get() = (getSystemService(UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType != Configuration.UI_MODE_TYPE_TELEVISION &&
         !packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    // The phone app on a phone: its own controls, gestures, small window and lock screen controls
+    // (dx.bi TV on a phone stays as it always was)
+    private val phoneApp get() = BuildConfig.PHONE_UI && phone
     private lateinit var clock: TextView
     private var showClock = true
     private lateinit var seekFlash: TextView
@@ -286,7 +289,7 @@ class PlayerActivity : AppCompatActivity() {
         player = exo
         playerView.player = exo
         // headphone buttons, Bluetooth and the small window's controls reach the player
-        session = MediaSession.Builder(this, exo).setId("dxbi-player").build()
+        if (phoneApp) session = MediaSession.Builder(this, exo).setId("dxbi-player").build()
         val accent = try { Color.parseColor(stream.optString("accent")) } catch (_: Exception) { Color.parseColor("#E50914") }
         zoom = PictureZoom(playerView)
         val next = stream.optJSONObject("next")
@@ -296,7 +299,7 @@ class PlayerActivity : AppCompatActivity() {
         upNextCard = findViewById(R.id.up_next)
         val leaveParty = { PlaybackBus.listener?.onPartyLeave(); Unit }
         // Phones: their own controls, laid out like a streaming app's, and worked by touch
-        controls = if (phone) PhoneControls(
+        controls = if (phoneApp) PhoneControls(
             this, playerView, exo, sound, zoom, ::shiftSubtitles, accent,
             title = stream.optString("title"),
             subtitle = stream.optString("subtitle"),
@@ -311,7 +314,7 @@ class PlayerActivity : AppCompatActivity() {
         ) else PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, leaveParty) { go -> finishWith(next = go) }
         PlaybackBus.player = this
         // Phones: taps, double taps, slides and pinches (the remote still works the same everywhere)
-        if (phone) {
+        if (phoneApp) {
             val touch = PlayerGestures(this, playerView, exo, controls, ::seek, ::flash).also { gestures = it }
             touch.onLockedTap = { (controls as? PhoneControls)?.showUnlock() }
             playerView.setOnTouchListener(touch)
@@ -344,8 +347,8 @@ class PlayerActivity : AppCompatActivity() {
                 val s = list.optJSONObject(i) ?: continue
                 val subUrl = s.optString("url").takeIf { it.isNotEmpty() } ?: continue
                 subtitles += MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                    // where it came from, for the phone's subtitle menu ("stream:3", "addon:7")
-                    .setId("${s.optString("source", "addon")}:$i")
+                    // where it came from, for the phone app's subtitle menu ("stream:3", "addon:7")
+                    .setId(if (phoneApp) "${s.optString("source", "addon")}:$i" else null)
                     .setMimeType(subtitleMime(subUrl))
                     .setLanguage(s.optString("lang").ifEmpty { null })
                     .setLabel(s.optString("label").ifEmpty { s.optString("lang") })
@@ -381,7 +384,7 @@ class PlayerActivity : AppCompatActivity() {
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) = updatePip()
             override fun onIsPlayingChanged(isPlaying: Boolean) = updatePip()
         })
-        if (phone) {
+        if (phoneApp) {
             ContextCompat.registerReceiver(this, pipButtons, IntentFilter(ACTION_PIP), ContextCompat.RECEIVER_NOT_EXPORTED)
             updatePip()
         }
@@ -564,7 +567,6 @@ class PlayerActivity : AppCompatActivity() {
         exo.pause()
         try {
             elsewhere.launch(chooser)
-            PlaybackBus.playedElsewhere(stream.toString())
         } catch (_: Exception) {
             ExternalPlayer.noApp(this)
         }
@@ -650,14 +652,14 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun updatePip() {
-        if (!phone || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        if (!phoneApp || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         pipParams()?.let { runCatching { setPictureInPictureParams(it) } }
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // (before Android 12 the app asks for the small window itself)
-        if (phone && Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S && player?.isPlaying == true) {
+        if (phoneApp && Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S && player?.isPlaying == true) {
             pipParams()?.let { runCatching { enterPictureInPictureMode(it) } }
         }
     }
@@ -692,7 +694,7 @@ class PlayerActivity : AppCompatActivity() {
         if (::controls.isInitialized) controls.release()
         if (::zoom.isInitialized) zoom.release()
         gestures?.release()
-        if (phone) runCatching { unregisterReceiver(pipButtons) }
+        if (phoneApp) runCatching { unregisterReceiver(pipButtons) }
         session?.release()
         session = null
         player?.release()

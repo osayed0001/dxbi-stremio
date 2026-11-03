@@ -100,25 +100,10 @@ class PlayerControls(
         // Phones: a tap shows or hides them, and the bar can be touched
         playerView.setOnClickListener { if (visible) hide() else show() }
         root.setOnClickListener { hide() }
-        // Dragged along, it shows where it'll land; the video goes there when the finger lifts
         line.setOnTouchListener { view, event ->
             val duration = exo.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: return@setOnTouchListener false
-            val at = (duration * (event.x / view.width).coerceIn(0f, 1f)).toLong()
-            when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
-                    view.parent.requestDisallowInterceptTouchEvent(true)
-                    dragging = at
-                    line.played = at.toFloat() / duration
-                    timeNow.text = time(at)
-                    timeLeft.text = "-" + time(duration - at)
-                }
-                android.view.MotionEvent.ACTION_UP -> {
-                    dragging = null
-                    exo.seekTo(at)
-                    paint()
-                }
-                android.view.MotionEvent.ACTION_CANCEL -> dragging = null
-            }
+            exo.seekTo((duration * (event.x / view.width).coerceIn(0f, 1f)).toLong())
+            paint()
             poke()
             true
         }
@@ -170,6 +155,7 @@ class PlayerControls(
         poke()
     }
 
+    /** Pressing anything keeps them up a while longer */
     override fun poke() {
         handler.removeCallbacks(hide)
         handler.postDelayed(hide, HIDE_AFTER_MS)
@@ -187,12 +173,8 @@ class PlayerControls(
 
     override fun release() = handler.removeCallbacksAndMessages(null)
 
-    /** Where the seek bar is being dragged to (null when it isn't) */
-    private var dragging: Long? = null
-
     fun paint() {
         play.setImageResource(if (exo.playWhenReady) R.drawable.ic_pause else R.drawable.ic_play)
-        if (dragging != null) return
         val duration = exo.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
         timeNow.text = time(exo.currentPosition)
         timeLeft.text = if (duration > 0) "-" + time(duration - exo.currentPosition) else "--:--"

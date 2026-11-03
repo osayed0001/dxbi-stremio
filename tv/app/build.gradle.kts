@@ -75,10 +75,6 @@ android {
 
     buildTypes {
         debug {
-            // Installs next to the released app (a different key can't replace it) and keeps its own data
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
-            buildConfigField("boolean", "SELF_UPDATE", "false")
             // the emulator is x86
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
         }
@@ -117,6 +113,19 @@ android {
 
     // The built-in dx.bi plugin is the one at the repository root, copied in at build time
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/dxbiAssets"))
+}
+
+androidComponents {
+    // The phone app's test builds install next to its released copy (a different key can't replace it),
+    // with their own data, and run the plugin they were built with (a released one fetched over it would
+    // hide the work being tested). dx.bi TV's test builds stay as they were.
+    onVariants(selector().withFlavor("device" to "mobile").withBuildType("debug")) { variant ->
+        variant.applicationId.set("com.notdxbi.dxbi.mobile.dev")
+        variant.buildConfigFields.put("SELF_UPDATE", com.android.build.api.variant.BuildConfigField("boolean", "false", null))
+        variant.outputs.forEach { it.versionName.set("$dxbiVersion-dev") }
+    }
+    // (the preview build is the phone app's)
+    beforeVariants(selector().withFlavor("device" to "tv").withBuildType("preview")) { it.enable = false }
 }
 
 val copyPlugin by tasks.registering(Copy::class) {

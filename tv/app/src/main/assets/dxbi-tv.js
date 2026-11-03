@@ -743,13 +743,14 @@
   }, 1000);
 
   // The native player reports where it is every few seconds, and once more when it closes.
-  // Watch stats count the time between reports while it plays (a long gap, asleep or stalled, doesn't).
+  // The phone apps: Watch stats count the time between reports while it plays (a long gap, asleep
+  // or stalled, doesn't)
   let playingSince = 0;
   tv.onProgress = (timeMs, durationMs, paused) => {
     if (!handoff || !/^#\/player\//.test(location.hash)) return;
     const now = Date.now();
     const dx = window.__dxbi;
-    if (!paused && playingSince && now - playingSince < 15000 && dx && dx.statsPlayed) dx.statsPlayed((now - playingSince) / 1000);
+    if (window.__dxbiEngine && !paused && playingSince && now - playingSince < 15000 && dx && dx.statsPlayed) dx.statsPlayed((now - playingSince) / 1000);
     playingSince = paused ? 0 : now;
     silenceWebPlayer();
     dispatch({ action: "Player", args: { action: "TimeChanged", args: { time: Math.max(0, Math.round(timeMs)), duration: Math.max(0, Math.round(durationMs)), device: "dxbi-tv" } } });

@@ -89,10 +89,6 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     val discover: StateFlow<Discover?> = engine.state("discover").map(Discover::from).stateIn(scope, SharingStarted.Eagerly, null)
 
     init {
-        // Played in another app: it keeps no watch progress here, so it counts as watched once it's opened there
-        PlaybackBus.onExternal = { json ->
-            runCatching { JSONObject(json) }.getOrNull()?.text("videoId")?.let { setWatched(it, true) }
-        }
         // Every time the page (re)starts: Home's rows, then dx.bi's pieces
         scope.launch {
             engine.ready.collect { up ->
