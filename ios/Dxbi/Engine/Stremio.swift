@@ -440,7 +440,11 @@ final class Stremio {
             }
             show("No external player found: install Infuse, VLC, Outplayer or SenPlayer. Playing it here.")
         }
-        playback = Playback(payload: payload, stremio: self)
+        let playback = Playback(payload: payload, stremio: self)
+        self.playback = playback
+        // (from here, not from a screen watching for it: the screens under the player don't update
+        // while it covers them, so it never closed)
+        PlayerHost.show(playback, stremio: self)
     }
 
     /** The player's ⋯ → Play with External Player: carries on in another app */
@@ -488,5 +492,6 @@ final class Stremio {
         ]
         page.js("window.__dxbiIos.active = ''; window.__dxbiIos.pendingClose = \(Json.quote(Json.encode(close))); window.__dxbiTv && window.__dxbiTv.playerClosed && window.__dxbiTv.playerClosed()")
         playback = nil
+        PlayerHost.hide()
     }
 }

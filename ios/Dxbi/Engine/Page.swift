@@ -67,7 +67,13 @@ final class Page: NSObject {
         webView.isInspectable = true
         #endif
         webView.load(URLRequest(url: Self.home))
+        // the clock changes (daylight saving, travelling) while the app is away
+        NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.js("window.__dxbiIos && (window.__dxbiIos.utcOffset = \(Self.utcOffset))") }
+        }
     }
+
+    static var utcOffset: Int { TimeZone.current.secondsFromGMT() / 60 }
 
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0" }
 
@@ -93,7 +99,7 @@ final class Page: NSObject {
         (function () {
           if (window.DxbiTV) return;
           const post = (message) => { try { window.webkit.messageHandlers.dxbi.postMessage(message); } catch (_) {} };
-          const ios = (window.__dxbiIos = { settings: \(Json.encode(savedSettings)), plugin: \(Json.quote(resource("dxbi.plugin.js"))), active: "", pendingClose: "" });
+          const ios = (window.__dxbiIos = { settings: \(Json.encode(savedSettings)), plugin: \(Json.quote(resource("dxbi.plugin.js"))), active: "", pendingClose: "", utcOffset: \(Self.utcOffset) });
           window.DxbiTV = {
             pluginSource: () => ios.plugin,
             getSettings: (t, plugin) => JSON.stringify(ios.settings[plugin] || {}),
@@ -111,6 +117,8 @@ final class Page: NSObject {
             engine: (t, json) => post({ op: "engine", json }),
             findServers: () => post({ op: "findServers" }),
             deviceInfo: () => \(Json.quote(Json.encode(device))),
+            // minutes ahead of UTC on the phone's own clock (the plugin's deviceClock: times as the phone shows them)
+            utcOffset: () => ios.utcOffset,
             isPhone: () => true,
             version: () => \(Json.quote(Self.version)),
             // (no torrentUrl: an iPhone can't download torrents itself; a streaming server plays them)

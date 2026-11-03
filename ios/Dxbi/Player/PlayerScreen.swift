@@ -39,7 +39,10 @@ struct PlayerScreen: View {
         .animation(.easeOut(duration: 0.2), value: visible)
         .onReceive(clock) { now = $0 }
         // (PlayerHost turns the screen sideways)
-        .onAppear { poke() }
+        .onAppear {
+            poke()
+            SystemVolume.prepare()
+        }
     }
 
     /** A menu is open: the controls stay until the screen is tapped */
@@ -91,12 +94,11 @@ struct PlayerScreen: View {
                 let base = seekPreview ?? playback.position
                 if seekPreview == nil { seekPreview = base }
                 let target = min(max(playback.position + Double(dx / width) * min(playback.duration, 600), 0), playback.duration)
+                // (just where it'll land and the seek bar: the rest of the controls stay away)
                 seekPreview = target
-                visible = true
             default:
                 if let target = seekPreview { playback.mpv.seek(to: target) }
                 seekPreview = nil
-                poke()
             }
         }
         h.slide = { phase, dy, left in
@@ -110,7 +112,10 @@ struct PlayerScreen: View {
                 UIScreen.main.brightness = b
                 level = ("sun.max.fill", Double(b), true)
             } else {
-                let v = min(max(Double(SystemVolume.value) - Double(dy / 300), 0), 1)
+                // from the last value set while sliding: the phone reports its volume a moment late,
+                // which undid small moves (only big swipes got through)
+                let from = level.flatMap { $0.left ? nil : $0.value } ?? Double(SystemVolume.value)
+                let v = min(max(from - Double(dy / 300), 0), 1)
                 SystemVolume.set(Float(v))
                 level = ("speaker.wave.2.fill", v, false)
             }
@@ -260,6 +265,13 @@ struct PlayerScreen: View {
                         .padding(.top, 10)
                 }
                 Spacer()
+                // seeking by swiping with the controls away: the seek bar alone
+                if let preview = seekPreview, !visible {
+                    Scrubber(position: preview, duration: playback.duration, accent: Color(playback.accent), segments: playback.segments) { _, _ in }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 44)
+                        .transition(.opacity)
+                }
             }
             .allowsHitTesting(false)
             if let level {
@@ -408,9 +420,16 @@ enum SystemVolume {
 
     static var value: Float { AVAudioSessionVolume.current }
 
-    static func set(_ value: Float) {
+    /** Put in place before the first swipe (its slider only appears once it's in a window) */
+    static func prepare() {
         if view.superview == nil { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.addSubview(view) }
-        slider?.value = value
+    }
+
+    static func set(_ value: Float) {
+        prepare()
+        guard let slider else { return }
+        slider.setValue(value, animated: false)
+        slider.sendActions(for: .valueChanged)
     }
 }
 
@@ -526,6 +545,8 @@ private struct SpeedMenu: View {
         }
         .buttonStyle(.glass)
         .simultaneousGesture(TapGesture().onEnded(onOpen))
+        // (opening upward, iOS turned the list upside down: Off ended up at the bottom)
+        .menuOrder(.fixed)
     }
 }
 
@@ -559,6 +580,8 @@ private struct TracksMenu: View {
         }
         .buttonStyle(.glass)
         .simultaneousGesture(TapGesture().onEnded(onOpen))
+        // (opening upward, iOS turned the list upside down: Off ended up at the bottom)
+        .menuOrder(.fixed)
     }
 }
 

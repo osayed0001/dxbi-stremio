@@ -67,6 +67,7 @@ final class Playback: Identifiable {
     @ObservationIgnored private var skipped: Set<String> = []
     @ObservationIgnored private var closing = false
     @ObservationIgnored private var artwork: MPMediaItemArtwork?
+    @ObservationIgnored private var tracksTask: Task<Void, Never>?
 
     init(payload: JSON, stremio: Stremio) {
         self.payload = payload
@@ -129,7 +130,7 @@ final class Playback: Identifiable {
         if paused != mpv.paused { paused = mpv.paused; nowPlaying() }
         if buffering != mpv.buffering { buffering = mpv.buffering }
         if speed != mpv.speed { speed = mpv.speed; nowPlaying() }
-        if tracks != mpv.tracks { tracks = mpv.tracks }
+        if tracks != mpv.tracks { settleTracks() }
         pip.refresh()
         autoSkipIfDue()
     }
@@ -173,6 +174,19 @@ final class Playback: Identifiable {
     func playNext() { finish(ended: true, next: true) }
 
     // MARK: - Subtitles and sound
+
+    /**
+     * The first list straight away; changes after that once they stop coming. Subtitle files arrive one
+     * by one for a while after the start, and each change redrew an open subtitle menu, jumping it about
+     */
+    private func settleTracks() {
+        guard !tracks.isEmpty else { tracks = mpv.tracks; return }
+        tracksTask?.cancel()
+        tracksTask = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled { tracks = mpv.tracks }
+        }
+    }
 
     var audioTracks: [MPV.Track] { tracks.filter { $0.type == "audio" } }
     var subtitleTracks: [MPV.Track] { tracks.filter { $0.type == "sub" } }

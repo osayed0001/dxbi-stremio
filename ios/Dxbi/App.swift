@@ -76,9 +76,6 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: stremio.message)
-        .onChange(of: stremio.playback?.id) {
-            if let playback = stremio.playback { PlayerHost.show(playback, stremio: stremio) } else { PlayerHost.hide() }
-        }
     }
 
     private var tabs: some View {
