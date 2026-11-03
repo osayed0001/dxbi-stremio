@@ -2,7 +2,7 @@ package com.notdxbi.dxbi.tv.phone
 
 import android.content.Context
 import com.notdxbi.dxbi.tv.Cast
-import com.notdxbi.dxbi.tv.PlaybackBus
+import com.notdxbi.dxbi.tv.Phone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -215,11 +215,11 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
      * Plays one of [streams] (dx.bi keeps the next best ready in case it won't play): in dx.bi's
      * player, another app, on a Chromecast (where Play goes anyway while one is connected) or as a download
      */
-    fun play(option: StreamOption, target: PlaybackBus.Target = PlaybackBus.Target.Player) = scope.launch {
-        PlaybackBus.nextTarget = when {
-            target != PlaybackBus.Target.Player -> target
-            !option.torrent && Cast.connected(app) -> PlaybackBus.Target.Cast
-            playInOtherApp.value -> PlaybackBus.Target.External
+    fun play(option: StreamOption, target: Phone.Target = Phone.Target.Player) = scope.launch {
+        Phone.nextTarget = when {
+            target != Phone.Target.Player -> target
+            !option.torrent && Cast.connected(app) -> Phone.Target.Cast
+            playInOtherApp.value -> Phone.Target.External
             else -> target
         }
         val link = dx("phone.play", option.index) as? String ?: option.play

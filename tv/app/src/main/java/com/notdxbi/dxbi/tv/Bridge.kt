@@ -80,11 +80,11 @@ class Bridge(private val activity: MainActivity) {
         activity.runOnUiThread { Toast.makeText(activity, text, Toast.LENGTH_LONG).show() }
     }
 
-    /** The phone app's screens: what dxbi-engine.js has to tell them (see phone/Engine.kt) */
+    /** The phone app's screens: what dxbi-engine.js has to tell them (src/mobile's phone/Engine.kt) */
     @JavascriptInterface
     fun engine(token: String, json: String) {
         if (!allowed(token)) return
-        activity.engine?.onMessage(json)
+        Phone.pageMessage(json)
     }
 
     /** Looks for streaming servers on the network; the page hears back through __dxbiTv.serversFound */

@@ -52,6 +52,7 @@ android {
             applicationId = "com.notdxbi.dxbi.mobile"
             buildConfigField("boolean", "PHONE_UI", "true")
             buildConfigField("String", "APK_NAME", "\"dxbi-mobile.apk\"")
+            proguardFiles("proguard-mobile.pro")
         }
     }
 
@@ -143,11 +144,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
-    // Phones: lock screen, headphone and picture-in-picture controls
-    implementation("androidx.media3:media3-session:1.5.1")
-    // Phones: casting to a Chromecast or Google TV (only started when something is cast)
-    implementation("com.google.android.gms:play-services-cast-framework:22.0.0")
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
     // Sound the device can't decode itself: most phones have no Dolby or DTS decoder, so those films
     // played silently. Jellyfin's build of Media3's FFmpeg extension; the hardware still goes first
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
@@ -160,19 +156,27 @@ dependencies {
     implementation("org.libtorrent4j:libtorrent4j-android-x86:2.1.0-39")
     implementation("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
-    // Phones: native screens drawn with Compose, over the page that does Stremio's work
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
-    // The frosted tab bar: what's behind it, blurred (Android 12 and later; a tint before that)
-    implementation("dev.chrisbanes.haze:haze:1.1.1")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    // dx.bi for phones only (the mobile flavor): dx.bi TV has none of these
+    // lock screen, headphone and picture-in-picture controls
+    "mobileImplementation"("androidx.media3:media3-session:1.5.1")
+    // casting to a Chromecast or Google TV (only started when something is cast)
+    "mobileImplementation"("com.google.android.gms:play-services-cast-framework:22.0.0")
+    "mobileImplementation"("androidx.mediarouter:mediarouter:1.7.0")
+    // native screens drawn with Compose, over the page that does Stremio's work
+    "mobileImplementation"(platform("androidx.compose:compose-bom:2024.12.01"))
+    "mobileImplementation"("androidx.compose.ui:ui")
+    "mobileImplementation"("androidx.compose.foundation:foundation")
+    "mobileImplementation"("androidx.compose.material3:material3")
+    "mobileImplementation"("androidx.compose.material:material-icons-extended")
+    "mobileImplementation"("androidx.navigation:navigation-compose:2.8.5")
+    // the frosted tab bar: what's behind it, blurred (Android 12 and later; a tint before that)
+    "mobileImplementation"("dev.chrisbanes.haze:haze:1.1.1")
+    "mobileImplementation"("androidx.activity:activity-compose:1.9.3")
+    "mobileImplementation"("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    "mobileImplementation"("io.coil-kt.coil3:coil-compose:3.0.4")
+    "mobileImplementation"("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    "mobileImplementation"("androidx.compose.ui:ui-tooling-preview")
+    // (the Compose compiler wants its runtime in every build: dx.bi TV uses none of it, and its release leaves it out)
+    "tvImplementation"(platform("androidx.compose:compose-bom:2024.12.01"))
+    "tvImplementation"("androidx.compose.runtime:runtime")
 }

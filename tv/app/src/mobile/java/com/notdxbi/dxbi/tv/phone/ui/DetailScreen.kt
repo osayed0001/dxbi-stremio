@@ -81,7 +81,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.asPaddingValues
-import com.notdxbi.dxbi.tv.PlaybackBus
+import com.notdxbi.dxbi.tv.Phone
 import com.notdxbi.dxbi.tv.phone.Details
 import com.notdxbi.dxbi.tv.phone.Load
 import com.notdxbi.dxbi.tv.phone.Review
@@ -140,10 +140,10 @@ fun DetailScreen(stremio: Stremio, type: String, id: String, preview: Title?, pl
     // (Android 13 and later ask before an app shows notifications: downloads show their progress in one)
     val notifications = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
 
-    fun play(option: StreamOption, target: PlaybackBus.Target = PlaybackBus.Target.Player) {
+    fun play(option: StreamOption, target: Phone.Target = Phone.Target.Player) {
         waitingFor = null
         sheet = false
-        if (target == PlaybackBus.Target.Download && android.os.Build.VERSION.SDK_INT >= 33 &&
+        if (target == Phone.Target.Download && android.os.Build.VERSION.SDK_INT >= 33 &&
             androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         stremio.play(option, target)

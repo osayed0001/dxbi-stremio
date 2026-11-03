@@ -31,7 +31,7 @@ targets:
         buildPhase: resources
       - path: ../tv/app/src/main/assets/dxbi-tv.js
         buildPhase: resources
-      - path: ../tv/app/src/main/assets/dxbi-engine.js
+      - path: ../tv/app/src/mobile/assets/dxbi-engine.js
         buildPhase: resources
       - path: ../tv/app/src/main/res/font/bebas_neue.ttf
         buildPhase: resources

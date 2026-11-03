@@ -10,7 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const plugin = read("dxbi.plugin.js");
 const tv = read("tv/app/src/main/assets/dxbi-tv.js");
-const engine = read("tv/app/src/main/assets/dxbi-engine.js");
+const engine = read("tv/app/src/mobile/assets/dxbi-engine.js");
 const bridge = read("tv/app/src/main/java/com/notdxbi/dxbi/tv/Bridge.kt");
 const main = read("tv/app/src/main/java/com/notdxbi/dxbi/tv/MainActivity.kt");
 

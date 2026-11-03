@@ -19,17 +19,6 @@ object PlaybackBus {
         fun onPartyLeave()
     }
 
-    /**
-     * Where the next stream the page hands over goes (the phone app chooses before asking the page to
-     * play): dx.bi's own player, another app, a Chromecast, or a download. Back to [Target.Player] once used.
-     */
-    enum class Target { Player, External, Cast, Download }
-
-    @Volatile
-    var nextTarget = Target.Player
-
-    fun takeTarget(): Target = nextTarget.also { nextTarget = Target.Player }
-
     /** The open player, for what the page's watch party asks of it */
     @Volatile
     var player: PlayerActivity? = null

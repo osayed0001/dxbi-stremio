@@ -1,4 +1,4 @@
-// node tools/engine-test.mjs: the phone app's engine (tv/app/src/main/assets/dxbi-engine.js), against a
+// node tools/engine-test.mjs: the phone app's engine (tv/app/src/mobile/assets/dxbi-engine.js), against a
 // stand-in for Stremio's core: what native asks for reaches the core, and what comes back is trimmed right
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = readFileSync(join(root, "tv/app/src/main/assets/dxbi-engine.js"), "utf8").replace("__DXBI_TV_TOKEN__", "t0ken");
+const source = readFileSync(join(root, "tv/app/src/mobile/assets/dxbi-engine.js"), "utf8").replace("__DXBI_TV_TOKEN__", "t0ken");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const sent = [];

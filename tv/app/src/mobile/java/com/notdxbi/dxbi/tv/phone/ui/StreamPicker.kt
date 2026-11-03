@@ -44,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.notdxbi.dxbi.tv.PlaybackBus
+import com.notdxbi.dxbi.tv.Phone
 import com.notdxbi.dxbi.tv.phone.StreamChoices
 import com.notdxbi.dxbi.tv.phone.StreamOption
 
@@ -64,7 +64,7 @@ fun StreamPicker(
     modifier: Modifier = Modifier,
     bottom: Dp = 24.dp,
     /** The ⋮ menu: another app, a Chromecast, or a download */
-    onPlayIn: (StreamOption, PlaybackBus.Target) -> Unit = { s, _ -> onPlay(s) },
+    onPlayIn: (StreamOption, Phone.Target) -> Unit = { s, _ -> onPlay(s) },
 ) {
     var quality by rememberSaveable { mutableStateOf<String?>(null) }
     var provider by rememberSaveable { mutableStateOf<String?>(null) }
@@ -165,7 +165,7 @@ private fun <T> Menu(label: String, options: List<Pair<T, String>>, onPick: (T) 
 }
 
 @Composable
-private fun StreamRow(s: StreamOption, picked: Boolean, onPlayIn: (PlaybackBus.Target) -> Unit, onPlay: () -> Unit) {
+private fun StreamRow(s: StreamOption, picked: Boolean, onPlayIn: (Phone.Target) -> Unit, onPlay: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Column(
         Modifier.padding(horizontal = Gutter, vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Dx.Surface)
@@ -191,11 +191,11 @@ private fun StreamRow(s: StreamOption, picked: Boolean, onPlayIn: (PlaybackBus.T
                     modifier = Modifier.padding(start = 4.dp).size(22.dp).clip(CircleShape).clickable { menu = true },
                 )
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Play with external player") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.External) })
+                    DropdownMenuItem(text = { Text("Play with external player") }, onClick = { menu = false; onPlayIn(Phone.Target.External) })
                     // (a torrent plays from the phone itself: a TV can't reach it, and it isn't a file to save)
                     if (!s.torrent) {
-                        DropdownMenuItem(text = { Text("Cast to a TV") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.Cast) })
-                        DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; onPlayIn(PlaybackBus.Target.Download) })
+                        DropdownMenuItem(text = { Text("Cast to a TV") }, onClick = { menu = false; onPlayIn(Phone.Target.Cast) })
+                        DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; onPlayIn(Phone.Target.Download) })
                     }
                 }
             }

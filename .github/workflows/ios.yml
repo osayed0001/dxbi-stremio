@@ -10,13 +10,13 @@ on:
       - ios/**
       - dxbi.plugin.js
       - tv/app/src/main/assets/dxbi-tv.js
-      - tv/app/src/main/assets/dxbi-engine.js
+      - tv/app/src/mobile/assets/dxbi-engine.js
       - .github/workflows/ios.yml
   pull_request:
     paths:
       - ios/**
       - tv/app/src/main/assets/dxbi-tv.js
-      - tv/app/src/main/assets/dxbi-engine.js
+      - tv/app/src/mobile/assets/dxbi-engine.js
       - .github/workflows/ios.yml
   release:
     types: [published]

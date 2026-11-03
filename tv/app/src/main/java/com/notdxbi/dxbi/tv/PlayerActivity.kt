@@ -1,18 +1,5 @@
 package com.notdxbi.dxbi.tv
 
-import android.app.PendingIntent
-import android.app.PictureInPictureParams
-import android.app.RemoteAction
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.graphics.drawable.Icon
-import android.os.Build
-import android.util.Rational
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.media3.session.MediaSession
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -20,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -41,6 +30,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -67,11 +57,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private lateinit var playerView: PlayerView
     private lateinit var controls: Controls
-    private var gestures: PlayerGestures? = null
-    private var session: MediaSession? = null
-    // a download playing from the phone (its id), rather than a stream the page handed over
-    private var offlineId: String? = null
-    // the subtitles' size (Stremio's setting), put back after the small window's bigger one
+    private var extras: PlayerHooks? = null
+    // the subtitles' size (Stremio's setting), put back after the phone app's small window's bigger one
     private var subtitleSize = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION
     private lateinit var zoom: PictureZoom
     private var party = false
@@ -149,9 +136,6 @@ class PlayerActivity : AppCompatActivity() {
 
     private val phone get() = (getSystemService(UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType != Configuration.UI_MODE_TYPE_TELEVISION &&
         !packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-    // The phone app on a phone: its own controls, gestures, small window and lock screen controls
-    // (dx.bi TV on a phone stays as it always was)
-    private val phoneApp get() = BuildConfig.PHONE_UI && phone
     private lateinit var clock: TextView
     private var showClock = true
     private lateinit var seekFlash: TextView
@@ -231,6 +215,8 @@ class PlayerActivity : AppCompatActivity() {
         skipButton.setOnClickListener { doSkip() }
 
         val stream = JSONObject(intent.getStringExtra(EXTRA_STREAM) ?: "{}")
+        // dx.bi for phones: its controls, gestures, small window and downloads (none in dx.bi TV)
+        extras = Phone.player(host, stream)
         segments = stream.optJSONArray("skips")?.let { list ->
             (0 until list.length()).mapNotNull { i ->
                 val o = list.optJSONObject(i) ?: return@mapNotNull null
@@ -270,9 +256,7 @@ class PlayerActivity : AppCompatActivity() {
         val online = OkHttpDataSource.Factory(http)
             .setUserAgent(if (ownAgent) null else "dxbi-tv/${BuildConfigVersion.name(this)}")
             .setDefaultRequestProperties(headers)
-        // a download plays from the phone
-        offlineId = stream.optString("offline").ifEmpty { null }
-        val dataSource = if (offlineId != null) Downloads.playback(this) else online
+        val dataSource = extras?.dataSource(online) ?: online
 
         // The TV's own decoders first, falling back to software ones when a format isn't supported
         val renderers = Renderers()
@@ -288,8 +272,6 @@ class PlayerActivity : AppCompatActivity() {
             .build()
         player = exo
         playerView.player = exo
-        // headphone buttons, Bluetooth and the small window's controls reach the player
-        if (phoneApp) session = MediaSession.Builder(this, exo).setId("dxbi-player").build()
         val accent = try { Color.parseColor(stream.optString("accent")) } catch (_: Exception) { Color.parseColor("#E50914") }
         zoom = PictureZoom(playerView)
         val next = stream.optJSONObject("next")
@@ -297,32 +279,10 @@ class PlayerActivity : AppCompatActivity() {
         nextArt = next?.optString("thumbnail").orEmpty()
         upNextSeconds = if (next == null) 0 else stream.optString("upNext", "10").toIntOrNull() ?: 0
         upNextCard = findViewById(R.id.up_next)
-        val leaveParty = { PlaybackBus.listener?.onPartyLeave(); Unit }
-        // Phones: their own controls, laid out like a streaming app's, and worked by touch
-        controls = if (phoneApp) PhoneControls(
-            this, playerView, exo, sound, zoom, ::shiftSubtitles, accent,
-            title = stream.optString("title"),
-            subtitle = stream.optString("subtitle"),
-            hasNext = next != null,
-            showClock = showClock,
-            seek = ::seek,
-            leaveParty = leaveParty,
-            leave = { go -> finishWith(next = go) },
-            onLock = { gestures?.lock() },
-            onUnlock = { gestures?.unlock() },
-            onExternal = { playElsewhere() },
-        ) else PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, leaveParty) { go -> finishWith(next = go) }
+        controls = extras?.controls(exo, sound, zoom, accent, next != null, showClock)
+            ?: PlayerControls(this, playerView, exo, sound, zoom, ::shiftSubtitles, accent, clock.takeIf { showClock }, next != null, ::seek, { PlaybackBus.listener?.onPartyLeave() }) { go -> finishWith(next = go) }
         PlaybackBus.player = this
-        // Phones: taps, double taps, slides and pinches (the remote still works the same everywhere)
-        if (phoneApp) {
-            val touch = PlayerGestures(this, playerView, exo, controls, ::seek, ::flash).also { gestures = it }
-            touch.onLockedTap = { (controls as? PhoneControls)?.showUnlock() }
-            playerView.setOnTouchListener(touch)
-            // messages (±10 s, brightness, speed…) small at the top, off the picture's middle
-            seekFlash.layoutParams = (seekFlash.layoutParams as android.widget.FrameLayout.LayoutParams).apply { topMargin = (22 * resources.displayMetrics.density).toInt() }
-            seekFlash.textSize = 14f
-            (6 * resources.displayMetrics.density).toInt().let { v -> seekFlash.setPadding(v * 2, v, v * 2, v) }
-        }
+        extras?.started(exo, controls)
         fitControls()
         findViewById<View>(R.id.up_next_play).setOnClickListener { finishWith(next = true) }
         findViewById<View>(R.id.up_next_cancel).setOnClickListener {
@@ -347,8 +307,7 @@ class PlayerActivity : AppCompatActivity() {
                 val s = list.optJSONObject(i) ?: continue
                 val subUrl = s.optString("url").takeIf { it.isNotEmpty() } ?: continue
                 subtitles += MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                    // where it came from, for the phone app's subtitle menu ("stream:3", "addon:7")
-                    .setId(if (phoneApp) "${s.optString("source", "addon")}:$i" else null)
+                    .setId(extras?.subtitleId(s.optString("source", "addon"), i))
                     .setMimeType(subtitleMime(subUrl))
                     .setLanguage(s.optString("lang").ifEmpty { null })
                     .setLabel(s.optString("label").ifEmpty { s.optString("lang") })
@@ -380,14 +339,9 @@ class PlayerActivity : AppCompatActivity() {
                 finishWith(error = lastError)
             }
 
-            // the small window takes the video's shape, and its play button follows the player
-            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) = updatePip()
-            override fun onIsPlayingChanged(isPlaying: Boolean) = updatePip()
+            override fun onVideoSizeChanged(videoSize: VideoSize) { extras?.changed() }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { extras?.changed() }
         })
-        if (phoneApp) {
-            ContextCompat.registerReceiver(this, pipButtons, IntentFilter(ACTION_PIP), ContextCompat.RECEIVER_NOT_EXPORTED)
-            updatePip()
-        }
         exo.prepare()
         exo.playWhenReady = true
         handler.postDelayed(reportProgress, PROGRESS_INTERVAL_MS)
@@ -550,45 +504,10 @@ class PlayerActivity : AppCompatActivity() {
         handler.postDelayed(hideFlash, 900)
     }
 
-    // -----------------------------------------------------------------------------------------------
-    // Phones: carrying on in another app (VLC, mpv…) from where this one is
-
-    private val elsewhere = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        val r = ExternalPlayer.result(result.data)
-        // where the other app got to is where this video's progress stands
-        if (r.positionMs > 0) finishWith(ended = r.ended, positionMs = r.positionMs, durationMs = r.durationMs) else finishWith()
-    }
-
-    private fun playElsewhere() {
-        val exo = player ?: return
-        val stream = JSONObject(intent.getStringExtra(EXTRA_STREAM) ?: "{}")
-        if (offlineId != null) return flash("Downloads play here only", 1500)
-        val chooser = ExternalPlayer.chooser(stream, exo.currentPosition) ?: return
-        exo.pause()
-        try {
-            elsewhere.launch(chooser)
-        } catch (_: Exception) {
-            ExternalPlayer.noApp(this)
-        }
-    }
-
-    /** A moment of feedback in the middle of the picture ("" hides it) */
-    private fun flash(text: String, forMs: Long) {
-        handler.removeCallbacks(hideFlash)
-        if (text.isEmpty()) {
-            seekFlash.visibility = View.GONE
-            return
-        }
-        seekFlash.text = text
-        seekFlash.visibility = View.VISIBLE
-        handler.postDelayed(hideFlash, forMs)
-    }
-
     private fun report() {
         val exo = player ?: return
         val duration = exo.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-        if (offlineId != null) Downloads.leftAt(offlineId!!, exo.currentPosition, ended = false)
-        else PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
+        if (extras?.keep(exo.currentPosition, ended = false) != true) PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
     }
 
     /** Closes the player and says how it went ([positionMs]/[durationMs]: where another app left it, instead of this one) */
@@ -600,79 +519,33 @@ class PlayerActivity : AppCompatActivity() {
         val exo = player
         val duration = durationMs?.takeIf { it > 0 } ?: exo?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
         val position = if (ended) duration else positionMs ?: exo?.currentPosition ?: 0L
-        // A download wasn't handed over by the page: its place is kept here instead
-        val offline = offlineId
-        if (offline != null) Downloads.leftAt(offline, position, ended)
-        else PlaybackBus.closed(position, duration, ended, error, next)
+        if (extras?.keep(position, ended) != true) PlaybackBus.closed(position, duration, ended, error, next)
         if (torrent) TorrentEngine.close()
         finish()
     }
 
-    // -----------------------------------------------------------------------------------------------
-    // Phones: leaving the app while a video plays keeps it playing in a small window
-
-    private val pipButtons = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.getStringExtra("do")) {
-                "play" -> player?.play()
-                "pause" -> player?.pause()
-                "back" -> player?.seekBack()
-                "forward" -> player?.seekForward()
-            }
-        }
-    }
-
-    private fun pipAction(icon: Int, title: String, what: String, code: Int): RemoteAction {
-        val intent = PendingIntent.getBroadcast(this, code, Intent(ACTION_PIP).setPackage(packageName).putExtra("do", what), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return RemoteAction(Icon.createWithResource(this, icon), title, title, intent)
-    }
-
-    private fun pipParams(): PictureInPictureParams? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
-        val exo = player ?: return null
-        val size = exo.videoSize
-        // (Android only takes shapes between 2.39:1 and 1:2.39)
-        val ratio = if (size.width > 0 && size.height > 0) Rational(size.width, size.height) else Rational(16, 9)
-        val shape = when {
-            ratio.toFloat() > 2.39f -> Rational(239, 100)
-            ratio.toFloat() < 1 / 2.39f -> Rational(100, 239)
-            else -> ratio
-        }
-        val playing = exo.isPlaying
-        val builder = PictureInPictureParams.Builder()
-            .setAspectRatio(shape)
-            .setActions(listOf(
-                pipAction(R.drawable.ic_rewind, "Back 10 seconds", "back", 1),
-                if (playing) pipAction(R.drawable.ic_pause, "Pause", "pause", 2) else pipAction(R.drawable.ic_play, "Play", "play", 2),
-                pipAction(R.drawable.ic_forward, "Forward 10 seconds", "forward", 3),
-            ))
-        // Android 12 and later go into the small window by themselves, smoothly
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setAutoEnterEnabled(playing).setSeamlessResizeEnabled(true)
-        return builder.build()
-    }
-
-    private fun updatePip() {
-        if (!phoneApp || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        pipParams()?.let { runCatching { setPictureInPictureParams(it) } }
+    override fun onPause() {
+        super.onPause()
+        // Leaving the app (Home button) pauses, unless it carries on in the phone app's small window;
+        // the progress so far is kept
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !isInPictureInPictureMode) player?.pause()
+        report()
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // (before Android 12 the app asks for the small window itself)
-        if (phoneApp && Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S && player?.isPlaying == true) {
-            pipParams()?.let { runCatching { enterPictureInPictureMode(it) } }
-        }
+        extras?.leaving()
     }
 
+    /** The phone app's small window (dx.bi TV never opens one): just the picture in it, a little bigger subtitles */
     override fun onPictureInPictureModeChanged(inPip: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(inPip, newConfig)
         if (inPip) {
-            // just the picture in the small window
             if (::controls.isInitialized) controls.hide()
             skipButton.visibility = View.GONE
             seekFlash.visibility = View.GONE
             if (::upNextCard.isInitialized) upNextCard.visibility = View.GONE
-            playerView.subtitleView?.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.6f)
+            playerView.subtitleView?.setFractionalTextSize(subtitleSize * 1.6f)
         } else {
             playerView.subtitleView?.setFractionalTextSize(subtitleSize)
             // The small window was closed (not opened back up): the video's over
@@ -680,11 +553,27 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // Leaving the app (Home button) pauses, unless it carries on in the small window; the progress so far is kept
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !isInPictureInPictureMode) player?.pause()
-        report()
+    /** What the phone app's part of the player can ask of it */
+    private val host = object : PlayerHost {
+        override val activity get() = this@PlayerActivity
+        override val playerView get() = this@PlayerActivity.playerView
+        override val seekFlash get() = this@PlayerActivity.seekFlash
+        override fun seek(direction: Int) = this@PlayerActivity.seek(direction)
+        override fun shiftSubtitles(byMs: Long) = this@PlayerActivity.shiftSubtitles(byMs)
+        override fun leaveParty() { PlaybackBus.listener?.onPartyLeave() }
+        override fun finishWith(ended: Boolean, next: Boolean, positionMs: Long?, durationMs: Long?) =
+            this@PlayerActivity.finishWith(ended = ended, next = next, positionMs = positionMs, durationMs = durationMs)
+
+        override fun flash(text: String, forMs: Long) {
+            handler.removeCallbacks(hideFlash)
+            if (text.isEmpty()) {
+                seekFlash.visibility = View.GONE
+                return
+            }
+            seekFlash.text = text
+            seekFlash.visibility = View.VISIBLE
+            handler.postDelayed(hideFlash, forMs)
+        }
     }
 
     override fun onDestroy() {
@@ -693,10 +582,7 @@ class PlayerActivity : AppCompatActivity() {
         if (PlaybackBus.player === this) PlaybackBus.player = null
         if (::controls.isInitialized) controls.release()
         if (::zoom.isInitialized) zoom.release()
-        gestures?.release()
-        if (phoneApp) runCatching { unregisterReceiver(pipButtons) }
-        session?.release()
-        session = null
+        extras?.release()
         player?.release()
         player = null
         super.onDestroy()
@@ -775,7 +661,6 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_STREAM = "stream"
-        private const val ACTION_PIP = "com.notdxbi.dxbi.tv.PIP"
         private const val PROGRESS_INTERVAL_MS = 5000L
         private const val SEEK_STEP_MS = 10_000L
     }

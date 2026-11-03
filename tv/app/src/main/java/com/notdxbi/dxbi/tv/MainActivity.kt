@@ -23,9 +23,6 @@ import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.platform.ComposeView
-import com.notdxbi.dxbi.tv.phone.Engine
-import com.notdxbi.dxbi.tv.phone.PhoneApp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -43,11 +40,6 @@ class MainActivity : AppCompatActivity() {
     private var lastBack = 0L
     private var playbackListener: PlaybackBus.Listener? = null
     private var intro: Intro? = null
-
-    /** Phones: the native screens drawn over the page, and their way into it (null on TVs) */
-    var engine: Engine? = null
-        private set
-    private var phoneUi: ComposeView? = null
 
     /**
      * A 4K TV would draw the page at 3840 px, four times the work and memory of 1080p, on hardware
@@ -82,16 +74,10 @@ class MainActivity : AppCompatActivity() {
         val root = FrameLayout(this)
         root.addView(web, webSize())
         setContentView(root)
-        // Phones get native screens over the page, which keeps doing Stremio's work underneath (laid out
-        // and running, just covered). For now debug and preview builds, while the screens are finished.
-        if (BuildConfig.PHONE_UI && Bridge(this).isPhone()) {
-            val engine = Engine(::js).also { engine = it }
-            // (where it draws nothing, touches reach the page: how the page shows through when it's needed)
-            phoneUi = ComposeView(this).apply { setContent { PhoneApp(engine) } }
-            root.addView(phoneUi, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        }
+        // dx.bi for phones: its own screens over the page (nothing in dx.bi TV: see PhoneHooks.kt)
+        Phone.attach(this, root, ::js)
         // Only when dx.bi is opened, not when the screen is rebuilt (after a page crash, a turned phone).
-        // Not in the phone app: the film is made for a TV screen.
+        // (not in the phone app: the film is made for a TV screen)
         if (savedInstanceState == null && !BuildConfig.PHONE_UI) intro = Intro(this, root).also { it.start() }
         web.setBackgroundColor(getColor(R.color.background))
         web.isFocusable = true
@@ -114,9 +100,7 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
 
         web.addJavascriptInterface(Bridge(this), "DxbiTV")
-        var startScript = assets.open("dxbi-tv.js").bufferedReader().use { it.readText() }
-        if (engine != null) startScript += "\n" + assets.open("dxbi-engine.js").bufferedReader().use { it.readText() }
-        startScript = startScript.replace(Bridge.PLACEHOLDER, Bridge.TOKEN)
+        val startScript = (assets.open("dxbi-tv.js").bufferedReader().use { it.readText() } + Phone.pageScript(this)).replace(Bridge.PLACEHOLDER, Bridge.TOKEN)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, startScript, setOf(STREMIO_ORIGIN))
             injectedAtStart = true
@@ -135,7 +119,7 @@ class MainActivity : AppCompatActivity() {
             // The page's engine crashed, or Android took its memory back (TVs with 1.5–2 GB): without
             // this, Android closes dx.bi straight back to the home screen
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                engine?.onMessage("""{"type":"gone"}""")
+                Phone.pageGone()
                 recoverFromCrash(detail.didCrash())
                 return true
             }
@@ -261,21 +245,9 @@ class MainActivity : AppCompatActivity() {
 
     fun play(json: String) {
         PlaybackBus.started(json)
-        when (PlaybackBus.takeTarget()) {
-            PlaybackBus.Target.Player -> startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_STREAM, json))
-            PlaybackBus.Target.External -> ExternalPlayer.open(this, json, externalPlayer)
-            PlaybackBus.Target.Cast -> Cast.play(this, json)
-            PlaybackBus.Target.Download -> {
-                Downloads.add(this, json)
-                // nothing plays: the page goes back to where it was
-                PlaybackBus.closed(0, 0, ended = false, error = null)
-            }
-        }
-    }
-
-    /** Another app playing a stream (VLC, mpv, MX Player…): it says where it got to when it closes */
-    private val externalPlayer = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        ExternalPlayer.finished(result.data)
+        // (the phone app can send it to another app, a Chromecast or a download instead)
+        if (Phone.play(this, json)) return
+        startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_STREAM, json))
     }
 
     fun openExternal(url: String) {
