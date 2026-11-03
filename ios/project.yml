@@ -10,6 +10,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
+    # where the app looks for its updates: the repository it was built from (the build sets it)
+    DXBI_UPDATE_REPO: notdxbi/dxbi-stremio
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""
     TARGETED_DEVICE_FAMILY: "1,2"
@@ -40,6 +42,7 @@ targets:
       path: Dxbi/Info.plist
       properties:
         CFBundleDisplayName: dx.bi
+        DxbiUpdateRepo: $(DXBI_UPDATE_REPO)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:

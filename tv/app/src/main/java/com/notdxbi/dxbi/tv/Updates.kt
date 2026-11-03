@@ -1,7 +1,10 @@
 package com.notdxbi.dxbi.tv
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -127,7 +130,7 @@ object Updates {
                 offering = true
                 val dialog = AlertDialog.Builder(activity)
                     .setTitle("dx.bi $latest is out")
-                    .setMessage("You have $current. Update now? It downloads in the background, then Android asks you to install it.")
+                    .setMessage("You have $current. Update now? It downloads in the background and installs (Android may ask you to confirm).")
                     .setPositiveButton("Update") { _, _ -> download(activity, found.url, found.size, latest) }
                     .setNegativeButton("Not now", null)
                     .setNeutralButton("Skip this version") { _, _ -> prefs.edit().putString("skipped", latest).apply() }
@@ -173,12 +176,7 @@ object Updates {
                     if (problem == null) break
                 }
                 if (problem != null) throw IllegalStateException(problem)
-                val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", apk)
-                activity.runOnUiThread {
-                    activity.startActivity(Intent(Intent.ACTION_VIEW)
-                        .setDataAndType(uri, "application/vnd.android.package-archive")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
+                install(activity, apk)
             } catch (e: Exception) {
                 activity.runOnUiThread {
                     if (activity.isFinishing) return@runOnUiThread
@@ -191,6 +189,44 @@ object Updates {
             } finally {
                 downloading.set(false)
             }
+        }
+    }
+
+    /**
+     * Installs the downloaded update. Through Android's package installer: from Android 12, once dx.bi
+     * installed the copy it's replacing (every update after the first), it installs without asking,
+     * and dx.bi closes to restart as the new version. Otherwise Android asks first (UpdateReceiver
+     * brings that up), as it does on older Androids, which get the installer screen straight away.
+     */
+    private fun install(activity: MainActivity, apk: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val installer = activity.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                    setAppPackageName(activity.packageName)
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+                val id = installer.createSession(params)
+                installer.openSession(id).use { session ->
+                    session.openWrite("dxbi.apk", 0, apk.length()).use { out ->
+                        apk.inputStream().use { it.copyTo(out) }
+                        session.fsync(out)
+                    }
+                    val done = PendingIntent.getBroadcast(
+                        activity, id, Intent(activity, UpdateReceiver::class.java),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                    )
+                    activity.runOnUiThread { Toast.makeText(activity, "Installing the update: dx.bi will close and open as the new version", Toast.LENGTH_LONG).show() }
+                    session.commit(done.intentSender)
+                }
+                return
+            } catch (_: Exception) { /* the installer screen instead */ }
+        }
+        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", apk)
+        activity.runOnUiThread {
+            activity.startActivity(Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 
@@ -241,5 +277,21 @@ object Updates {
             if (x != y) return x > y
         }
         return false
+    }
+}
+
+/** Hears how an update's install went: brings up Android's "Install?" when it wants to ask, or says why it failed */
+class UpdateReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                @Suppress("DEPRECATION")
+                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
+                context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            PackageInstaller.STATUS_SUCCESS -> Unit // (the new version is starting)
+            PackageInstaller.STATUS_FAILURE_ABORTED -> Unit // they said no
+            else -> Toast.makeText(context, "The update didn't install: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "try again later"}", Toast.LENGTH_LONG).show()
+        }
     }
 }

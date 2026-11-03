@@ -59,6 +59,11 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
+        <!-- How installing an update went (Updates.install) -->
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="false" />
+
         <service
             android:name=".DownloadsService"
             android:exported="false"

@@ -50,6 +50,8 @@ enum Route: Hashable {
 struct RootView: View {
     @Environment(Stremio.self) private var stremio
     @State private var tab = AppTab.home
+    @State private var update: Updates.Release?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -81,6 +83,18 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: stremio.message)
+        // A new release: offered once when the app opens or comes back (every few hours at most)
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            guard phase == .active else { return }
+            Task { if let found = await Updates.check() { update = found } }
+        }
+        .alert("dx.bi \(update?.version ?? "") is out", isPresented: Binding(get: { update != nil }, set: { if !$0 { update = nil } }), presenting: update) { release in
+            Button("Open the Release") { UIApplication.shared.open(release.page) }
+            Button("Skip This Version") { Updates.skip(release) }
+            Button("Not Now", role: .cancel) {}
+        } message: { _ in
+            Text("You have \(Page.version). The release page has dxbi.ipa: install it over this one with SideStore, AltStore or Sideloadly, and your sign-in, settings and downloads stay.")
+        }
     }
 
     private var tabs: some View {
