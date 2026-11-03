@@ -220,6 +220,7 @@ private fun Screens(stremio: Stremio) {
                         onCustomiseHome = { nav.navigate("customise") },
                         onSettings = { nav.navigate("settings") },
                         onStremioSettings = { nav.navigate("playback") },
+                        onStats = { nav.navigate("stats") },
                     )
                 }
                 composable(
@@ -259,6 +260,7 @@ private fun Screens(stremio: Stremio) {
                 composable("customise") { CustomiseHomeScreen(stremio, onBack = { nav.popBackStack() }) }
                 composable("settings") { SettingsScreen(stremio, onBack = { nav.popBackStack() }) }
                 composable("playback") { PlaybackSettingsScreen(stremio, onBack = { nav.popBackStack() }) }
+                composable("stats") { com.notdxbi.dxbi.tv.phone.ui.StatsScreen(stremio, onBack = { nav.popBackStack() }) }
             }
         }
 

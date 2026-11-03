@@ -365,6 +365,9 @@ class Stremio(context: Context, val engine: Engine, private val scope: Coroutine
     /** dx.bi settings, as the TV lists them */
     suspend fun settings(): List<Setting> = (ask("settings") as? JSONArray).objects().map(Setting::from)
 
+    /** Your stats (dx.bi's Watch stats), or null when they're switched off */
+    suspend fun stats(): JSONObject? = dx("phone.stats") as? JSONObject
+
     suspend fun saveSetting(key: String, value: Any?) {
         ask("saveSetting", JSONObject().put("key", key).put("value", value ?: JSONObject.NULL))
         refreshExtras()

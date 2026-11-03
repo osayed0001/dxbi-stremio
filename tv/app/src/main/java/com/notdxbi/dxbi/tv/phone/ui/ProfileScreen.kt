@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -85,6 +86,7 @@ fun ProfileScreen(
     onCustomiseHome: () -> Unit,
     onSettings: () -> Unit,
     onStremioSettings: () -> Unit,
+    onStats: () -> Unit,
 ) {
     val account by stremio.account.collectAsState()
     val myList by stremio.myList.collectAsState()
@@ -110,6 +112,7 @@ fun ProfileScreen(
             Column(Modifier.padding(top = 6.dp)) {
                 Line(Icons.Filled.VideoLibrary, "Library", "Everything you've added or watched", onClick = onLibrary)
                 Line(Icons.Filled.Download, "Downloads", "Films and episodes saved to watch offline", onClick = onDownloads)
+                Line(Icons.Filled.BarChart, "Your stats", "How long you've watched, what and when", onClick = onStats)
                 Line(Icons.Filled.Tune, "Customise Home", "Order and hide Home's rows", onClick = onCustomiseHome)
                 Line(Icons.Filled.Settings, "dx.bi settings", "Rows, reviews, skipping, watch party and more", onClick = onSettings)
                 Line(Icons.Filled.Subtitles, "Playback & subtitles", "Languages, subtitles, next episode, streaming server", onClick = onStremioSettings)
