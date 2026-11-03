@@ -5,7 +5,7 @@ name: iPhone app
 # with your own Apple ID when they install it.
 on:
   push:
-    branches: [mobile]
+    branches: [main, mobile]
     paths:
       - ios/**
       - dxbi.plugin.js
