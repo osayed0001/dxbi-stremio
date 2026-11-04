@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.30.0
+
+- **Subtitles start in your language on TV and phones.** With *Subtitles when a video starts* on, dx.bi TV, the Android phone app and the iPhone app now switch on a subtitle in your Stremio subtitle language as the video starts, as the desktop app does. They used to always start with subtitles off (#56).
+- **More subtitle languages on TV and phones.** Subtitle addons answer a moment after a video opens, and the TV and phone players only got what had arrived by then, often just English. They now wait up to 4 seconds for a subtitle in your language. OpenSubtitles' Brazilian Portuguese is now named, and counts as Portuguese (#56).
+- **Finished episodes get their watched tag in mpv and VLC.** Closing an external player past the end credits (90%) now marks the episode watched, even if you skipped parts of it. Tracking also works for streams picked straight from a title's page. Built by osayed0001 (#70).
+- **Phone apps keep your progress and pick the next episode.** A finished episode is marked watched, and its series page moves on to the next one, ready to play. On iPhone, watch progress is saved reliably, the lock screen and Control Centre show what's playing, and torrents play through a streaming server on your network. On Android phones, 4K no longer closes the page under the player, and Up Next no longer crashes. Built by osayed0001 (#73).
+
+## 2.29.0
+
+- **mpv and VLC keep your place.** Play something in an external player from the desktop app and dx.bi now saves your place every second: it shows in Continue Watching, the next Play resumes there, and anything you watch past 70% is marked watched and synced, just like Stremio's own player. Skipping ahead doesn't count as watching. A small pop-up shows the progress while you watch (✕ shrinks it to a pill), the player's window is named after what's playing, and closing dx.bi while the player is still open saves your place first. Works with dx.bi's External player setting and Stremio's "Play in external player". Built by osayed0001 (#69).
+- **Discord status keeps up.** dx.bi sends Discord at most one status update every 4 seconds, which is all Discord accepts, so your status doesn't fall behind while watching (#71).
+
+## 2.28.0
+
+- **dx.bi for Android phones.** A new app made for phones and tablets: native screens, a player made for touch with picture-in-picture, downloads, Chromecast and other players. It installs next to dx.bi TV (`dxbi-mobile.apk`). Built by osayed0001 (#67).
+- **dx.bi for iPhone.** dx.bi on iPhone (iOS 26 and later), in Apple's style with Liquid Glass, with a player that plays MKV, HEVC, Dolby and DTS, picture-in-picture, and downloads. Install it with SideStore, AltStore or Sideloadly (`dxbi.ipa`). Built by osayed0001 (#67).
+- **Dropped subtitle files work on Windows.** SRT and VTT files dropped onto the player could be ignored when Windows didn't say what kind of file they were, or when they started with a byte order mark or a cue other than 1 (EskimoDev, #66).
+
 ## 2.27.0
 
 - **Times match your device's clock.** The player clock, *Ends at* and episode air times now use the clock your computer or TV shows. Places that changed their clock rules, like British Columbia keeping summer time from November 2026, showed an hour out because the app's built-in time zone rules were older than your system's. Stremio Enhanced users still get the browser's time.
