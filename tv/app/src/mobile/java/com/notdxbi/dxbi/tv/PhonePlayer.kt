@@ -64,7 +64,9 @@ class PhonePlayer(private val host: PlayerHost, private val stream: JSONObject) 
     override fun started(exo: ExoPlayer, controls: Controls) {
         this.exo = exo
         // headphone buttons, Bluetooth and the small window's controls reach the player
-        session = MediaSession.Builder(activity, exo).setId("dxbi-player").build()
+        // (an id of its own: Up Next opens the next player before this one is gone, and two sessions
+        // with one id crash the app)
+        session = MediaSession.Builder(activity, exo).setId("dxbi-player-${System.identityHashCode(this)}").build()
         // taps, double taps, slides and pinches (the remote still works the same everywhere)
         val touch = PlayerGestures(activity, host.playerView, exo, controls, host::seek, host::flash).also { gestures = it }
         touch.onLockedTap = { (controls as? PhoneControls)?.showUnlock() }
@@ -95,9 +97,9 @@ class PhonePlayer(private val host: PlayerHost, private val stream: JSONObject) 
     }
 
     // A download wasn't handed over by the page: its place is kept here instead
-    override fun keep(positionMs: Long, ended: Boolean): Boolean {
+    override fun keep(positionMs: Long, durationMs: Long, ended: Boolean): Boolean {
         val id = offlineId ?: return false
-        Downloads.leftAt(id, positionMs, ended)
+        Downloads.leftAt(id, positionMs, durationMs, ended)
         return true
     }
 

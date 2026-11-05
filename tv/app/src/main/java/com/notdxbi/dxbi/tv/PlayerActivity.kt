@@ -290,13 +290,16 @@ class PlayerActivity : AppCompatActivity() {
             hideUpNext()
         }
 
-        // Subtitles start off, like Netflix (and dx.bi's default): pick one from the subtitles button.
+        // Subtitles start in Stremio's subtitle language (Settings → Player) when dx.bi's "Subtitles when
+        // a video starts" is on: the page sends that language, and marks the subtitle file to start
+        // with. Off (dx.bi's default, like Netflix): pick one from the subtitles button.
         // Files with several audio tracks (dual-audio releases) start in Stremio's audio language
         // (Settings → Player), when they have it
         val audioLanguage = stream.optString("audioLanguage").ifEmpty { null }
+        val subtitleLanguage = stream.optString("subtitleLanguage").ifEmpty { null }
         exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setPreferredTextLanguage(null)
+            .setPreferredTextLanguage(subtitleLanguage)
             .setSelectUndeterminedTextLanguage(false)
             .apply { if (audioLanguage != null) setPreferredAudioLanguage(audioLanguage) }
             .build()
@@ -311,7 +314,7 @@ class PlayerActivity : AppCompatActivity() {
                     .setMimeType(subtitleMime(subUrl))
                     .setLanguage(s.optString("lang").ifEmpty { null })
                     .setLabel(s.optString("label").ifEmpty { s.optString("lang") })
-                    .setSelectionFlags(0)
+                    .setSelectionFlags(if (s.optBoolean("start")) C.SELECTION_FLAG_DEFAULT else 0)
                     .build()
             }
         }
@@ -507,7 +510,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun report() {
         val exo = player ?: return
         val duration = exo.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-        if (extras?.keep(exo.currentPosition, ended = false) != true) PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
+        if (extras?.keep(exo.currentPosition, duration, ended = false) != true) PlaybackBus.listener?.onProgress(exo.currentPosition, duration, !exo.isPlaying)
     }
 
     /** Closes the player and says how it went ([positionMs]/[durationMs]: where another app left it, instead of this one) */
@@ -519,7 +522,7 @@ class PlayerActivity : AppCompatActivity() {
         val exo = player
         val duration = durationMs?.takeIf { it > 0 } ?: exo?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
         val position = if (ended) duration else positionMs ?: exo?.currentPosition ?: 0L
-        if (extras?.keep(position, ended) != true) PlaybackBus.closed(position, duration, ended, error, next)
+        if (extras?.keep(position, duration, ended) != true) PlaybackBus.closed(position, duration, ended, error, next)
         if (torrent) TorrentEngine.close()
         finish()
     }

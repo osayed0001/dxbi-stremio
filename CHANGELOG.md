@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.31.2
+
+- **Stream stats show your torrent connection limit.** The Peers line used to read "1 connected of 55 found", but 55 was never the number of peers found: it's how many connections Stremio's torrent profile allows (Default allows 55). It now reads "1 connected (limit 55)", and on the Default or Soft profile it points to *Settings → Streaming → Torrent profile*, where Fast (200) or Ultra fast (400) raises it. The profile applies to torrents opened after you change it, so start the video again afterwards. A torrent can only go as fast as the people sharing it can send, however fast your connection is; cached debrid streams don't depend on peers.
+
+## 2.31.1
+
+- **Downloads play straight from your computer.** On the desktop app, *Play downloaded* sent many files through the streaming server's converter, the same way an online stream is converted, so skipping through buffered while VLC played the same file smoothly. Stremio only plays a file directly when it's H.264, HEVC, VP8 or VP9 with no subtitle tracks inside, so AV1 releases and almost anything with built-in subtitles (most anime and Blu-ray releases) were converted on the fly. Downloads now play directly from the disk whenever this PC can decode them, and skipping is instant. Files it can't decode (DTS or AC3 sound, for example) are still converted.
+- **Subtitles inside a downloaded video are kept.** They're copied out beside the video when a download finishes (and for downloads you already have, the next time dx.bi starts), so every language still shows in the subtitle menu, even offline.
+
+## 2.31.0
+
+- **Downloads, like Netflix.** Save films and episodes to watch without internet, in the dx.bi desktop app and the Android phone app. Films get a Download button, every episode gets a ⬇ button, and a season downloads with one press of *Download season*. You choose the quality each time (Best, 4K, 1080p, 720p or Smallest file), or once in Downloads → Settings, or choose the source yourself: on a computer, press ⬇ on any stream in the list; on a phone, use *Choose the source myself*. dx.bi checks each link first and skips debrid streams that aren't actually ready. Subtitles in your language and the artwork are saved too, and downloads play in dx.bi's own player with your progress kept, even with no connection at all.
+- **The Downloads page** (desktop: profile menu → Downloads; phone: Profile → Downloads) groups downloads by title and shows progress, speed and space used, with pause, resume, retry, delete, and *Delete watched*. Its **Settings** tab sets the download folder (desktop) or phone storage/memory card (Android), the quality, whether watched downloads are deleted automatically (never, as soon as you finish one, or a day later), how many download at once (desktop) and Wi-Fi only (Android).
+- On a computer, downloads are ordinary video files with their subtitles beside them (`Videos/dx.bi/<Title>/S01E01 - Episode.mkv`). They carry on after a dropped connection or a restart, keep the computer from sleeping while they run, and torrents download through dx.bi's streaming server.
+
+## 2.30.0
+
+- **Subtitles start in your language on TV and phones.** With *Subtitles when a video starts* on, dx.bi TV, the Android phone app and the iPhone app now switch on a subtitle in your Stremio subtitle language as the video starts, as the desktop app does. They used to always start with subtitles off (#56).
+- **More subtitle languages on TV and phones.** Subtitle addons answer a moment after a video opens, and the TV and phone players only got what had arrived by then, often just English. They now wait up to 4 seconds for a subtitle in your language. OpenSubtitles' Brazilian Portuguese is now named, and counts as Portuguese (#56).
+- **Finished episodes get their watched tag in mpv and VLC.** Closing an external player past the end credits (90%) now marks the episode watched, even if you skipped parts of it. Tracking also works for streams picked straight from a title's page. Built by osayed0001 (#70).
+- **Phone apps keep your progress and pick the next episode.** A finished episode is marked watched, and its series page moves on to the next one, ready to play. On iPhone, watch progress is saved reliably, the lock screen and Control Centre show what's playing, and torrents play through a streaming server on your network. On Android phones, 4K no longer closes the page under the player, and Up Next no longer crashes. Built by osayed0001 (#73).
+
+## 2.29.0
+
+- **mpv and VLC keep your place.** Play something in an external player from the desktop app and dx.bi now saves your place every second: it shows in Continue Watching, the next Play resumes there, and anything you watch past 70% is marked watched and synced, just like Stremio's own player. Skipping ahead doesn't count as watching. A small pop-up shows the progress while you watch (✕ shrinks it to a pill), the player's window is named after what's playing, and closing dx.bi while the player is still open saves your place first. Works with dx.bi's External player setting and Stremio's "Play in external player". Built by osayed0001 (#69).
+- **Discord status keeps up.** dx.bi sends Discord at most one status update every 4 seconds, which is all Discord accepts, so your status doesn't fall behind while watching (#71).
+
+## 2.28.0
+
+- **dx.bi for Android phones.** A new app made for phones and tablets: native screens, a player made for touch with picture-in-picture, downloads, Chromecast and other players. It installs next to dx.bi TV (`dxbi-mobile.apk`). Built by osayed0001 (#67).
+- **dx.bi for iPhone.** dx.bi on iPhone (iOS 26 and later), in Apple's style with Liquid Glass, with a player that plays MKV, HEVC, Dolby and DTS, picture-in-picture, and downloads. Install it with SideStore, AltStore or Sideloadly (`dxbi.ipa`). Built by osayed0001 (#67).
+- **Dropped subtitle files work on Windows.** SRT and VTT files dropped onto the player could be ignored when Windows didn't say what kind of file they were, or when they started with a byte order mark or a cue other than 1 (EskimoDev, #66).
+
 ## 2.27.0
 
 - **Times match your device's clock.** The player clock, *Ends at* and episode air times now use the clock your computer or TV shows. Places that changed their clock rules, like British Columbia keeping summer time from November 2026, showed an hour out because the app's built-in time zone rules were older than your system's. Stremio Enhanced users still get the browser's time.
